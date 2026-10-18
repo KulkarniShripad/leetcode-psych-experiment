@@ -34,7 +34,8 @@ Every question, label, feedback template, practice pack and number comes from th
 Requires Node 20.19+ or 22.12+.
 
 ```bash
-cd dsa-self-check
+git clone https://github.com/KulkarniShripad/leetcode-psych-experiment.git
+cd leetcode-psych-experiment
 npm install
 npm run dev          # http://localhost:5173
 ```
@@ -101,7 +102,7 @@ The emulators need Java 11+. The export, analysis and seed scripts also work aga
 ## 3. Deploy to Vercel
 
 1. Make sure the code is on the branch Vercel builds (normally `main`).
-2. On <https://vercel.com>: *Add New → Project*, import the repo, set **Root Directory** to `dsa-self-check`.
+2. On <https://vercel.com>: *Add New → Project* and import the repo. Leave **Root Directory** as the repo root;
    Vercel detects Vite (`npm run build`, output `dist`).
 3. Add the four `VITE_FIREBASE_*` values under *Environment Variables* (Production and Preview) and deploy.
 4. Vite bakes env vars in at build time, so **redeploy after changing any of them**.
@@ -118,7 +119,7 @@ that set in Block 1. A participant sees `round(100 × (participants who scored l
 `config.beatsPctFallback` (50) while the histogram is empty. The app creates missing documents on its own.
 
 The scripts use the Firebase Admin SDK with a **service account key**: *Project settings → Service accounts →
-Generate new private key*, saved as `service-account.json` in this folder (git-ignored; never share it).
+Generate new private key*, saved as `service-account.json` in the repo root (git-ignored; never share it).
 
 ```bash
 export GOOGLE_APPLICATION_CREDENTIALS=./service-account.json
@@ -366,7 +367,7 @@ Block 1 and Block 2 are **time order**; `block1.setId` says which set came first
 ## 10. Project layout
 
 ```
-dsa-self-check/
+leetcode-psych-experiment/
 ├─ src/
 │  ├─ content/            the five JSON files + types.ts + validate.ts (startup validation)
 │  ├─ lib/
