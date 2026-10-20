@@ -19,6 +19,12 @@ cat("\n2. Confidence by group\n")
 print(aggregate(cbind(pre_conf_mean, post_conf_mean, conf_change, score_raw) ~ arm, data = df, FUN = mean))
 model <- lm(post_conf_mean ~ arm_code + pre_conf_mean, data = df)  # H1: positive arm_code
 print(summary(model))
+# F test for the group adjusted for pre (pre entered first), partial eta squared, adjusted means.
+tab <- anova(lm(post_conf_mean ~ pre_conf_mean + arm_code, data = df))
+print(tab)
+cat("partial eta squared:", round(tab["arm_code", "Sum Sq"] / (tab["arm_code", "Sum Sq"] + tab["Residuals", "Sum Sq"]), 3), "\n")
+at <- data.frame(arm_code = c(0, 1), pre_conf_mean = mean(df$pre_conf_mean))
+cat("adjusted post means (control, experimental):", round(predict(model, at), 2), "\n")
 print(anova(lm(post_conf_mean ~ arm_code * pre_conf_mean, data = df)))  # slopes check
 
 cat("\n3. Manipulation check (Q12)\n")
