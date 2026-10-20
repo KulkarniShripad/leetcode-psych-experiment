@@ -5,7 +5,7 @@ import { renderHud } from './hud.js';
 
 // S4. 'Correct' or 'Incorrect' only; the right option is never revealed.
 // Control: this plain card. Experimental: the same card with the game panel underneath, and
-// right after answering (`animate`) a full-screen animated overlay on top of it.
+// right after answering (`animate`) the animated result card on top of it.
 export function renderFeedback(ctx, state, { animate = false } = {}) {
   const fb = state.feedback;
   ctx.setProgress(null);

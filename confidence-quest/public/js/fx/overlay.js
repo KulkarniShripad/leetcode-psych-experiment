@@ -4,7 +4,7 @@ import { confetti } from './confetti.js';
 import { countUp, fillBar, reducedMotion } from './motion.js';
 import { playCorrect, playIncorrect, playLevelUp } from './sound.js';
 
-// Full-screen animated feedback after an answer (experimental group only).
+// Animated result card shown over the page after an answer (experimental group only).
 // Everything it shows comes from the server's `game` object.
 export function showAnswerOverlay({ correct, game, nextLabel, onNext }) {
   const o = game.overlay;
@@ -87,14 +87,14 @@ export function showAnswerOverlay({ correct, game, nextLabel, onNext }) {
       'aria-labelledby': 'fx-title',
       'data-testid': 'fx-overlay',
     },
-    h('div', { class: 'fx-rays', 'aria-hidden': 'true' }),
     mount(h('div', { class: 'fx-stage' }), ...parts),
   );
   document.body.append(overlay);
   document.body.classList.add('fx-open');
 
-  if (correct && o.confetti) confetti(overlay, { count: 90 + Math.min(s?.current ?? 0, 6) * 25, originY: 0.28 });
-  if (lv?.leveled_up && o.confetti) setTimeout(() => confetti(overlay, { count: 120, originY: 0.55, spread: 1.2 }), 700);
+  // A light sprinkle, a little more for longer streaks and level-ups.
+  if (correct && o.confetti) confetti(overlay, { count: 30 + Math.min(s?.current ?? 0, 6) * 8, originY: 0.22, spread: 0.7 });
+  if (lv?.leveled_up && o.confetti) setTimeout(() => confetti(overlay, { count: 40, originY: 0.5, spread: 0.8 }), 700);
   if (o.sound) {
     if (correct) playCorrect(s?.current ?? 1);
     else playIncorrect();
@@ -129,7 +129,7 @@ export function showAnswerOverlay({ correct, game, nextLabel, onNext }) {
   next.addEventListener('click', () => go().catch(() => {}));
   setTimeout(() => {
     next.hidden = false;
-    next.focus();
+    next.focus({ preventScroll: true }); // keep the card scrolled to the top on short screens
   }, Math.max(o.min_display_ms, reducedMotion() ? 0 : delay));
   return { close };
 }

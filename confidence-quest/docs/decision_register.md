@@ -11,7 +11,7 @@ placeholders show up as warnings on server start and on the admin status page.
 | D3 | "I don't know" option | Off | `study.json` → `questions.dont_know_option.enabled`. Stored as `IDK`, always scored incorrect. |
 | D4 | Tokens | On: correct answers earn Easy 1 / Medium 2 / Hard 3, **plus +1 streak bonus** on every correct answer while on a streak of 2 or more (max 26) | `gamification.json` → `tokens` (`enabled`, `award_on`: `correct` or `any_answer`, `points_by_difficulty`, `streak_bonus`) |
 | D4 | Streaks and levels | On: current/best streak; five levels Rookie (0) → Apprentice (4) → Coder (9) → Hacker (15) → Legend (22 tokens) | `gamification.json` → `streaks`, `levels.list` |
-| D4 | Full-screen animated feedback | On (see below) | `gamification.json` → `overlay` (`enabled`, `min_display_ms`, `confetti`, `shake_on_incorrect`, all titles and texts) |
+| D4 | Animated result card after each answer | On (see below) | `gamification.json` → `overlay` (`enabled`, `min_display_ms`, `confetti`, `shake_on_incorrect`, all titles and texts) |
 | D4 | Game bar (HUD) on every question | On: tokens, streak flame, level bar, badges x/8, one dot per question (green/red) | `gamification.json` → `hud` |
 | D4 | Live rank while answering | On: "You're ahead of 4 of 9 players at question 5", against real experimental players who already answered that question | `gamification.json` → `live_rank` |
 | D4 | Sound effects | **Off**: in a shared room, sounds tell neighbours which group someone is in. Turn on only with headphones. | `gamification.json` → `sound.enabled` |
@@ -38,14 +38,15 @@ experimental group now gets:
 
 1. **A game bar on every question:** tokens, a streak flame, a level bar, badges x/8 and a
    row of nine dots that turn green or red as they answer.
-2. **A full-screen animated result after every answer.**
-   - **Correct:** green burst, a check mark that draws itself, confetti (more for longer
-     streaks), titles that escalate with the streak ("Double up!", "On fire!",
-     "Unstoppable!", "Legendary!"), "+3 tokens · +1 streak bonus", "4 IN A ROW", the level
-     bar filling, a gold level-up banner and badge unlock cards.
-   - **Wrong:** red flash, the screen shakes, a cross draws itself, "So close" / "Not quite"
-     plus a line of encouragement, "4-answer streak lost", "+0 tokens". Effort badges
-     still unlock, so a struggling participant is not punished on every screen.
+2. **An animated result card after every answer.** A large plain white card appears
+   over the dimmed page (no green or red screens), with the same text and layout either way:
+   - **Correct:** a check mark that draws itself, titles that escalate with the streak
+     ("Double up!", "On fire!", "Unstoppable!", "Legendary!"), "+3 tokens · +1 streak
+     bonus", "4 IN A ROW", the level bar filling, a level-up banner, badge unlock cards and
+     a light sprinkle of confetti around the card.
+   - **Wrong:** a cross that draws itself, "So close" / "Not quite" plus a line of
+     encouragement, "4-answer streak lost", "+0 tokens", and a small shake of the card.
+     Effort badges still unlock, so a struggling participant is not punished on every screen.
    - Both show the live rank against real players when there is anyone to compare with.
 3. **A results reveal** before the post-survey: trophy, level, count-up tiles (tokens, best
    streak, badges), rank, the badge collection (locked ones greyed out) and an animated

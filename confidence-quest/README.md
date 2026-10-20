@@ -3,7 +3,7 @@
 A small web app for one controlled experiment: **does gamification change students'
 confidence on a coding test?** Participants are randomly split into a Control and an
 Experimental group. Both answer the same nine questions with right/wrong feedback. The
-Experimental group plays it as a game: a live game bar, full-screen animated feedback on
+Experimental group plays it as a game: a live game bar, an animated result card after
 every answer, tokens, streaks, levels, badges, live ranking and a leaderboard.
 A pre- and post-test confidence survey feeds the planned ANCOVA.
 
@@ -67,7 +67,7 @@ clicks and network retries are ignored (idempotency keys, unique constraints).
 ### The game layer (Experimental group only)
 
 - **Game bar on every question:** tokens, streak flame, level bar, badges x/8, a dot per question (green/red).
-- **Full-screen result after every answer.** Correct: confetti, a check that draws itself, streak titles that escalate ("Double up!" → "On fire!" → "Unstoppable!"), +tokens and streak bonus, level-up banner, badge unlocks. Wrong: red flash and shake, "streak lost", encouragement.
+- **Animated result card after every answer**, plain white over the dimmed page. Correct: a check that draws itself, streak titles that escalate ("Double up!" → "On fire!" → "Unstoppable!"), +tokens and streak bonus, level-up banner, badge unlocks, light confetti. Wrong: a cross, "streak lost", encouragement, a small shake.
 - **Tokens** 1/2/3 by difficulty + a streak bonus; **5 levels** (Rookie → Legend); **8 badges** (3 for effort, 5 for performance).
 - **Live rank** while answering, against real players who already answered that question.
 - **Results reveal:** trophy, count-up tiles, badge collection, rank, animated leaderboard; confetti for the top half.
