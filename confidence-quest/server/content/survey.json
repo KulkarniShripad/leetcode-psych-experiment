@@ -1,0 +1,110 @@
+{
+  "status": "approved",
+  "note": "Final questionnaires. Pre-test (8 items): C1-C6 then P1-P2. Post-test Part A (Q10) comes right after Q9, before any score is shown. Part B (after the score reveal): C1-C6 with the same stem, scale, wording and order as the pre-test, then Q11, Q13, Q14 and Q12 last, because Q12 is the only item that mentions badges, tokens or a leaderboard. To cut Q13/Q14 if time is tight, remove them from phases.post; nothing else changes.",
+  "scales": {
+    "confidence_7": {
+      "min": 1,
+      "max": 7,
+      "labels": { "1": "Not at all confident", "4": "Moderately confident", "7": "Extremely confident" }
+    },
+    "count_0_9": { "min": 0, "max": 9, "labels": {} },
+    "compare_7": {
+      "min": 1,
+      "max": 7,
+      "labels": { "1": "Much worse", "4": "About the same", "7": "Much better" }
+    },
+    "agree_7": {
+      "min": 1,
+      "max": 7,
+      "labels": { "1": "Strongly disagree", "7": "Strongly agree" }
+    }
+  },
+  "items": [
+    { "id": "C1", "measure": "confidence", "scale": "confidence_7", "text": "Solve coding problems that involve arrays" },
+    { "id": "C2", "measure": "confidence", "scale": "confidence_7", "text": "Solve sliding-window problems" },
+    { "id": "C3", "measure": "confidence", "scale": "confidence_7", "text": "Solve two-pointer problems" },
+    { "id": "C4", "measure": "confidence", "scale": "confidence_7", "text": "Read a short piece of code and work out its output correctly" },
+    { "id": "C5", "measure": "confidence", "scale": "confidence_7", "text": "Find the bug in a short piece of code" },
+    { "id": "C6", "measure": "confidence", "scale": "confidence_7", "text": "Solve coding problems in general" },
+    {
+      "id": "P1",
+      "measure": "prior_experience",
+      "type": "choice",
+      "text": "About how many problems have you solved on coding practice platforms (e.g. LeetCode, HackerRank, Codeforces, CodeChef)?",
+      "options": [
+        { "value": 1, "label": "0" },
+        { "value": 2, "label": "1-25" },
+        { "value": 3, "label": "26-100" },
+        { "value": 4, "label": "101-300" },
+        { "value": 5, "label": "More than 300" }
+      ]
+    },
+    {
+      "id": "P2",
+      "measure": "practice_frequency",
+      "type": "choice",
+      "text": "In the last month, how often did you practice on such platforms?",
+      "options": [
+        { "value": 1, "label": "Never" },
+        { "value": 2, "label": "Less than once a week" },
+        { "value": 3, "label": "1-3 days a week" },
+        { "value": 4, "label": "4-6 days a week" },
+        { "value": 5, "label": "Daily" }
+      ]
+    },
+    {
+      "id": "Q10",
+      "measure": "postdiction",
+      "scale": "count_0_9",
+      "text": "Out of the nine questions you just answered, how many do you think you got right?"
+    },
+    {
+      "id": "Q11",
+      "measure": "relative_performance",
+      "scale": "compare_7",
+      "text": "Compared with the other participants, I think I performed..."
+    },
+    {
+      "id": "Q12",
+      "measure": "manipulation_check",
+      "type": "choice",
+      "text": "During the questions, did you see any badges, tokens or a leaderboard?",
+      "options": [
+        { "value": 1, "label": "Yes" },
+        { "value": 2, "label": "No" },
+        { "value": 3, "label": "Not sure" }
+      ]
+    },
+    { "id": "Q13", "measure": "pressure", "scale": "agree_7", "text": "I felt pressure while answering the questions." },
+    { "id": "Q14", "measure": "enjoyment", "scale": "agree_7", "text": "I enjoyed doing these questions." }
+  ],
+  "phases": {
+    "pre": {
+      "title": "Before you start",
+      "intro": "Your answers are anonymous and used only for research. There are no right or wrong answers, so please answer honestly.",
+      "sections": [
+        {
+          "stem": "How confident are you that you can do each of the following right now?",
+          "items": ["C1", "C2", "C3", "C4", "C5", "C6"]
+        },
+        { "title": "About your coding practice", "items": ["P1", "P2"] }
+      ]
+    },
+    "post_a": {
+      "title": "One quick question",
+      "intro": "",
+      "sections": [{ "items": ["Q10"] }]
+    },
+    "post": {
+      "title": "A few last questions",
+      "intro": "There are no right or wrong answers, so please answer honestly.",
+      "sections": [
+        {
+          "stem": "How confident are you that you can do each of the following right now?",
+          "items": ["C1", "C2", "C3", "C4", "C5", "C6"]
+        },
+        { "items": ["Q11", "Q13", "Q14", "Q12"] }
+      ]
+    }
+  }
+}

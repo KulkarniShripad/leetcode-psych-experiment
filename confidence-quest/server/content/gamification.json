@@ -1,0 +1,99 @@
+{
+  "status": "provisional",
+  "note": "DECISIONS D4-D7 and D17. Everything here applies to the EXPERIMENTAL group only; the Control group never sees any of it. Tokens 1/2/3 by difficulty plus a streak bonus, levels, eight badges (three effort-based, five performance-based), an animated result card after each answer, a live game bar (answer dots off so Q10 is not a simple count), live rank against real players and a top-5 leaderboard. Edit this file to change any rule; no code change is needed.",
+  "instructions_extra": "In this version you play for points: earn tokens for every correct answer, build streaks for bonus tokens, level up, unlock badges and see how you rank against the other players as you go.",
+  "tokens": {
+    "enabled": true,
+    "label": "tokens",
+    "award_on": "correct",
+    "points_by_difficulty": { "Easy": 1, "Medium": 2, "Hard": 3 },
+    "default_points": 1,
+    "streak_bonus": { "enabled": true, "min_streak": 2, "bonus": 1 }
+  },
+  "streaks": { "enabled": true, "label": "streak" },
+  "levels": {
+    "enabled": true,
+    "list": [
+      { "at": 0, "name": "Rookie" },
+      { "at": 4, "name": "Apprentice" },
+      { "at": 9, "name": "Coder" },
+      { "at": 15, "name": "Hacker" },
+      { "at": 22, "name": "Legend" }
+    ]
+  },
+  "badges": {
+    "enabled": true,
+    "definitions": [
+      { "key": "off_the_mark", "name": "Off the Mark", "description": "First correct answer", "icon": "target", "criteria": { "type": "correct_count", "gte": 1 } },
+      { "key": "halfway", "name": "Halfway There", "description": "Answered five questions", "icon": "rocket", "criteria": { "type": "answered_count", "gte": 5 } },
+      { "key": "hot_streak", "name": "Hot Streak", "description": "Three correct in a row", "icon": "flame", "criteria": { "type": "correct_streak", "gte": 3 } },
+      { "key": "window_master", "name": "Window Master", "description": "All Sliding Window questions correct", "icon": "bolt", "criteria": { "type": "section_all_correct", "section": "Sliding Window" } },
+      { "key": "pointer_pro", "name": "Pointer Pro", "description": "All Two Pointers questions correct", "icon": "medal", "criteria": { "type": "section_all_correct", "section": "Two Pointers" } },
+      { "key": "array_ace", "name": "Array Ace", "description": "All Arrays questions correct", "icon": "star", "criteria": { "type": "section_all_correct", "section": "Arrays" } },
+      { "key": "finisher", "name": "Finisher", "description": "Answered all nine questions", "icon": "trophy", "criteria": { "type": "answered_count", "gte": 9 } },
+      { "key": "perfect_run", "name": "Perfect Run", "description": "All nine correct", "icon": "crown", "criteria": { "type": "correct_count", "gte": 9 } }
+    ]
+  },
+  "feedback_panel": {
+    "show_tokens_earned": true,
+    "show_total_tokens": true,
+    "show_new_badges": true
+  },
+  "overlay": {
+    "enabled": true,
+    "min_display_ms": 1200,
+    "confetti": true,
+    "shake_on_incorrect": true,
+    "correct_titles": ["Correct!", "Nailed it!", "Brilliant!", "Spot on!", "You got it!"],
+    "streak_titles": [
+      { "from": 2, "text": "Double up!" },
+      { "from": 3, "text": "On fire!" },
+      { "from": 4, "text": "Unstoppable!" },
+      { "from": 6, "text": "Legendary!" }
+    ],
+    "incorrect_titles": ["Not quite", "Missed this one", "So close"],
+    "encouragement": [
+      "Shake it off. The next one is yours.",
+      "Every pro misses some. Keep going!",
+      "Reset and go again!"
+    ],
+    "expired_title": "Time's up",
+    "streak_text": "{n} in a row",
+    "streak_lost_text": "{n}-answer streak lost",
+    "level_up_text": "Level up! Level {number}: {name}",
+    "badge_unlocked_text": "Badge unlocked"
+  },
+  "hud": { "enabled": true, "show_answer_dots": false },
+  "live_rank": {
+    "enabled": true,
+    "min_pool": 1,
+    "text": "You're ahead of {ahead} of {of} players at question {n}",
+    "leading_text": "You're leading all {of} players at question {n}!"
+  },
+  "sound": { "enabled": false },
+  "leaderboard": {
+    "enabled": true,
+    "title": "Leaderboard",
+    "metric": "tokens",
+    "metric_label": "Tokens",
+    "top_n": 5,
+    "include_self_row": true,
+    "include_pilot_results": false,
+    "tie_break": "earlier_finish",
+    "names": {
+      "adjectives": ["Swift", "Bright", "Calm", "Bold", "Clever", "Quick", "Steady", "Keen", "Lucky", "Brave", "Sharp", "Witty"],
+      "nouns": ["Otter", "Falcon", "Panda", "Tiger", "Koala", "Heron", "Lynx", "Dolphin", "Fox", "Owl", "Badger", "Gecko"]
+    },
+    "self_label": "You",
+    "empty_text": "You're the first to finish. Others will join the board as they finish."
+  },
+  "rank": {
+    "show": "both",
+    "rank_text": "You are ranked {rank} of {of}.",
+    "percentile_text": "That puts you in the top {top_percent}%."
+  },
+  "final": {
+    "headline": "Run complete!",
+    "confetti_top_percent": 50
+  }
+}
