@@ -28,7 +28,6 @@ async function apiPlayer(baseURL, correct) {
     await api.post('/api/answer', { data: { questionId: q.id, selectedOption: letter, idempotencyKey: key() } });
     await api.post('/api/next', { data: { n } });
   }
-  await api.post('/api/survey/post_a', { data: { answers: { Q10: 5 } } });
   await api.get('/api/results');
   await api.dispose();
 }
@@ -70,9 +69,6 @@ test('experimental group in a busy session', async ({ browser, baseURL }) => {
     }
     await page.getByTestId('fx-next').click();
   }
-  await expect(page.getByRole('heading', { name: 'One quick question' })).toBeVisible();
-  await page.locator('input[name=item-Q10][value="7"]').check();
-  await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page.getByTestId('leaderboard')).toBeVisible();
   await page.waitForTimeout(2500);
   await page.screenshot({ path: path.join(SHOTS, '10-final-leaderboard.png'), fullPage: true });

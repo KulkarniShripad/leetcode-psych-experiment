@@ -11,9 +11,8 @@ const STEP_LABELS = {
   INSTRUCTIONS: 'Instructions',
   QUESTION: 'Question',
   FEEDBACK: 'Feedback',
-  POST_SURVEY_A: 'Part A (Q10)',
   FINAL: 'Score',
-  POST_SURVEY: 'Part B',
+  POST_SURVEY: 'Post-test',
   DEBRIEF: 'Debrief',
 };
 

@@ -113,15 +113,7 @@ async function playThrough(page, label, { wrongOn = [] } = {}) {
     await continueAfterFeedback(page, i < 8 ? 'Next question' : 'Continue');
   }
 
-  // Part A: the guess, before any score is shown.
-  await expect(page.getByRole('heading', { name: 'One quick question' })).toBeVisible();
-  await expect(page.getByText('Out of the nine questions you just answered, how many do you think you got right?')).toBeVisible();
-  expect(await page.locator('body').innerText()).not.toMatch(/You answered \d of 9/);
-  expect(await page.locator('fieldset.likert input[type=radio]').count()).toBe(10);
-  if (label === 'first') await shoot(page, '05-part-a');
-  await page.locator('input[name=item-Q10][value="7"]').check();
-  await page.getByRole('button', { name: 'Continue' }).click();
-
+  // Straight to the score after Q9.
   await expect(page.getByRole('heading', { name: 'Your result' })).toBeVisible();
   await expectCleanScreen(page);
   const score = await page.getByTestId('score').textContent();
@@ -130,13 +122,13 @@ async function playThrough(page, label, { wrongOn = [] } = {}) {
   await shoot(page, `05-final-${sawGamePanel ? 'experimental' : 'control'}`);
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
 
-  // Part B: C1-C6 again, then Q11, Q13, Q14 and Q12 last.
+  // Post-test: C1-C6 again, then Q11, Q13, Q14 and Q12 last.
   await expect(page.getByRole('heading', { name: 'A few last questions' })).toBeVisible();
   expect(await page.locator('fieldset.likert').count()).toBe(10);
   const lastItem = await page.locator('fieldset.likert').last().locator('legend').innerText();
   expect(lastItem).toMatch(/did you see any badges, tokens or a leaderboard\?/);
   await fillSurvey(page);
-  if (label === 'first') await shoot(page, '06-part-b');
+  if (label === 'first') await shoot(page, '06-post-test');
   await page.getByRole('button', { name: 'Continue' }).click();
 
   await expect(page.getByRole('heading', { name: 'Thank you for taking part' })).toBeVisible();

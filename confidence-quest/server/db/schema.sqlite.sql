@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS allocation_slots (
 CREATE TABLE IF NOT EXISTS survey_responses (
   id             INTEGER PRIMARY KEY,
   participant_id TEXT NOT NULL REFERENCES participants(id),
-  phase          TEXT NOT NULL CHECK (phase IN ('pre', 'post_a', 'post')),   -- post_a: right after Q9, before the score
+  phase          TEXT NOT NULL CHECK (phase IN ('pre', 'post_a', 'post')),   -- post_a held Q10, which is no longer asked
   item_id        TEXT NOT NULL,
   value          INTEGER NOT NULL,
   submitted_at   TEXT NOT NULL,

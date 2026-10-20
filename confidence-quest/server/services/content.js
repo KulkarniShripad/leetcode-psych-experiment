@@ -47,7 +47,6 @@ const scaleSchema = z
 
 const MEASURES = [
   'confidence',
-  'postdiction',
   'relative_performance',
   'manipulation_check',
   'pressure',
@@ -58,7 +57,7 @@ const MEASURES = [
   'other',
 ];
 
-export const SURVEY_PHASES = ['pre', 'post_a', 'post'];
+export const SURVEY_PHASES = ['pre', 'post'];
 
 const surveyItemSchema = z
   .object({
@@ -93,8 +92,8 @@ const surveySchema = z.object({
   note: z.string().optional(),
   scales: z.record(z.string(), scaleSchema).default({}),
   items: z.array(surveyItemSchema).min(1),
-  // pre: before the questions. post_a: right after Q9, before any score. post: after the score.
-  phases: z.object({ pre: surveyPhaseSchema, post_a: surveyPhaseSchema.optional(), post: surveyPhaseSchema }).strict(),
+  // pre: before the questions. post: after the score.
+  phases: z.object({ pre: surveyPhaseSchema, post: surveyPhaseSchema }).strict(),
 });
 
 export const BADGE_ICONS = ['star', 'flame', 'bolt', 'trophy', 'target', 'medal', 'rocket', 'crown'];
@@ -344,7 +343,7 @@ function crossCheck({ questions, answerKey, survey, gamification }) {
     if (!ids.includes(id)) problems.push(`answer_key.json: ${id}: no question with this id in questions.json`);
   }
 
-  problems.push(...checkSurvey(survey, questions.length));
+  problems.push(...checkSurvey(survey));
 
   const sections = new Set(questions.map((q) => q.section));
   const badgeKeys = new Set();
@@ -364,8 +363,8 @@ function crossCheck({ questions, answerKey, survey, gamification }) {
 }
 
 // Survey rules that protect the design: every referenced item exists, the confidence items
-// are asked before and after with the same stem, wording and order, and Q10 runs 0..N.
-function checkSurvey(survey, questionCount) {
+// are asked before and after with the same stem, wording and order.
+function checkSurvey(survey) {
   const problems = [];
   const byId = new Map();
   survey.items.forEach((item, i) => {
@@ -393,7 +392,6 @@ function checkSurvey(survey, questionCount) {
   const layout = {};
   for (const phase of SURVEY_PHASES) {
     const spec = survey.phases[phase];
-    if (!spec) continue;
     const seen = new Set();
     layout[phase] = [];
     spec.sections.forEach((section, si) => {
@@ -419,16 +417,6 @@ function checkSurvey(survey, questionCount) {
   for (const item of survey.items.filter((it) => it.measure === 'confidence')) {
     if (!pre.some((e) => e.id === item.id)) problems.push(`survey.json: confidence item ${item.id} is not asked in phases.pre`);
   }
-  if ((layout.post_a ?? []).some((e) => byId.get(e.id)?.measure === 'confidence')) {
-    problems.push('survey.json: phases.post_a: confidence items belong in pre and post, not post_a');
-  }
-
-  for (const item of survey.items.filter((it) => it.measure === 'postdiction')) {
-    const scale = resolveScale(survey, item);
-    if (scale && (scale.min !== 0 || scale.max !== questionCount)) {
-      problems.push(`survey.json: ${item.id}.scale: the postdiction scale must run from 0 to ${questionCount}`);
-    }
-  }
   return problems;
 }
 
@@ -440,7 +428,7 @@ export function resolveScale(survey, item) {
 function collectWarnings({ survey, gamification, study, questions }) {
   const warnings = [];
   if (survey.status !== 'approved') warnings.push('survey.json is not marked approved yet (D9).');
-  const used = new Set(SURVEY_PHASES.flatMap((phase) => survey.phases[phase]?.sections.flatMap((s) => s.items) ?? []));
+  const used = new Set(SURVEY_PHASES.flatMap((phase) => survey.phases[phase].sections.flatMap((s) => s.items)));
   const unused = survey.items.filter((item) => !used.has(item.id)).map((item) => item.id);
   if (unused.length) warnings.push(`survey.json: items not asked in any survey: ${unused.join(', ')}.`);
   if (gamification.status !== 'approved') warnings.push('gamification.json rules are provisional, not approved (D4-D7, D17).');

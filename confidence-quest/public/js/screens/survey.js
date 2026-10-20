@@ -1,9 +1,9 @@
 import { ApiError, newKey } from '../api.js';
 import { h, heading, mount, whileBusy } from '../dom.js';
 
-// Pre-test, post-test Part A (Q10) and Part B. Rendered entirely from survey.json via the
+// Pre-test and post-test. Rendered entirely from survey.json via the
 // server, section by section; every item is required.
-const PHASE_OF_STEP = { PRE_SURVEY: 'pre', POST_SURVEY_A: 'post_a', POST_SURVEY: 'post' };
+const PHASE_OF_STEP = { PRE_SURVEY: 'pre', POST_SURVEY: 'post' };
 
 function scaleItem(item, number) {
   const values = [];

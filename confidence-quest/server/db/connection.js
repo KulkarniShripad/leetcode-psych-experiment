@@ -1,7 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import fs from 'node:fs';
 import path from 'node:path';
-import Database from 'better-sqlite3';
 import pg from 'pg';
 
 // One async database interface with two back ends:
@@ -28,7 +27,18 @@ export async function openDatabase({ databaseUrl, dbPath, pgSchema, pgPoolMax } 
 
 // ---------- SQLite ----------
 
-export function openSqlite(dbPath) {
+// better-sqlite3 is an optional native package, loaded only when SQLite is used: a cloud build
+// that cannot install it still runs on Postgres.
+async function loadSqlite() {
+  try {
+    return (await import('better-sqlite3')).default;
+  } catch (err) {
+    throw new Error(`SQLite is not available (${err.message}). Use Node 22 or 24 and run npm install again, or set DATABASE_URL.`);
+  }
+}
+
+export async function openSqlite(dbPath) {
+  const Database = await loadSqlite();
   if (dbPath !== ':memory:') fs.mkdirSync(path.dirname(dbPath), { recursive: true });
   const raw = new Database(dbPath);
   raw.pragma('journal_mode = WAL');

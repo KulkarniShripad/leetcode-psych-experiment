@@ -9,7 +9,7 @@ export function surveyRoutes({ study }) {
     res.json(await study.getSurvey(req.participant, parsePhase(req.params.phase)));
   });
 
-  // Submits every answer at once. pre also assigns the arm; post_a (Q10) leads to the score.
+  // Submits every answer at once. pre also assigns the arm; post completes the study.
   router.post(
     '/api/survey/:phase',
     requireParticipant,

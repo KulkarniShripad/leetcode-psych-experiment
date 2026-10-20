@@ -116,9 +116,9 @@ describe('surveys', () => {
     expect(pre.body.sections[0].stem).toBe('How confident are you that you can do each of the following right now?');
     expect(pre.body.sections[1].items[0].options.map((o) => o.label)).toEqual(['0', '1-25', '26-100', '101-300', 'More than 300']);
     expect(pre.body.sections[0].items[0]).not.toHaveProperty('reverse');
-    expect(errorCode(await p.get('/api/survey/post_a'))).toBe('NOT_YOUR_TURN');
     expect(errorCode(await p.get('/api/survey/post'))).toBe('NOT_YOUR_TURN');
     expect(errorCode(await p.get('/api/survey/middle'))).toBe('VALIDATION');
+    expect(errorCode(await p.get('/api/survey/post_a'))).toBe('VALIDATION');
   });
 
   it('rejects a missing item and an out-of-range value, saving nothing', async () => {
@@ -239,36 +239,15 @@ describe('questions', () => {
 });
 
 describe('results, post-survey, completion', () => {
-  it('the score is only shown after Part A (Q10), which comes right after Q9', async () => {
+  it('the score is shown right after Q9, and only then', async () => {
     const p = participant(ctx.app);
     await toQuestions(p, ctx.content);
     expect(errorCode(await p.get('/api/results'))).toBe('NOT_YOUR_TURN');
     expect(errorCode(await p.post('/api/results/ack'))).toBe('NOT_YOUR_TURN');
     expect(errorCode(await p.post('/api/complete'))).toBe('NOT_YOUR_TURN');
-    expect(errorCode(await p.post('/api/survey/post_a', { answers: { Q10: 5 } }))).toBe('NOT_YOUR_TURN');
     await answerAll(p, ctx.content);
-    expect((await p.get('/api/state')).body.step).toBe('POST_SURVEY_A');
-    // No score anywhere before the guess.
-    expect(errorCode(await p.get('/api/results'))).toBe('NOT_YOUR_TURN');
-    const partA = await p.get('/api/survey/post_a');
-    expect(partA.body.sections).toEqual([
-      {
-        title: null,
-        stem: null,
-        items: [
-          {
-            id: 'Q10',
-            text: 'Out of the nine questions you just answered, how many do you think you got right?',
-            type: 'scale',
-            scale: { min: 0, max: 9, labels: {} },
-          },
-        ],
-      },
-    ]);
-    expect(JSON.stringify(partA.body)).not.toMatch(/score|correct/i);
-    expect((await p.post('/api/survey/post_a', { answers: { Q10: 10 } })).status).toBe(400);
-    const sent = await p.post('/api/survey/post_a', { answers: { Q10: 7 } });
-    expect(sent.body.state.step).toBe('FINAL');
+    expect((await p.get('/api/state')).body.step).toBe('FINAL');
+    expect(errorCode(await p.get('/api/survey/post'))).toBe('NOT_YOUR_TURN');
     const results = await p.get('/api/results');
     expect(results.status).toBe(200);
     expect(results.body.title).toBe('Your result');

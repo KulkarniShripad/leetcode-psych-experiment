@@ -146,12 +146,8 @@ export async function answerAll(p, content, choose = (id) => ANSWER_KEY[id]) {
   return results;
 }
 
-// After Q9: Part A (Q10 guess, before any score), the score reveal, then Part B.
-export async function finish(p, content, postValue, guess = 5) {
-  if (content.survey.phases.post_a) {
-    const partA = await p.post('/api/survey/post_a', { answers: surveyAnswers(content, 'post_a', guess), idempotencyKey: key() });
-    if (partA.status !== 200) throw new Error(`part A failed: ${partA.status} ${partA.text}`);
-  }
+// After Q9: the score reveal, then the post-test.
+export async function finish(p, content, postValue) {
   const results = await p.get('/api/results');
   if (results.status !== 200) throw new Error(`results failed: ${results.status} ${results.text}`);
   await p.post('/api/results/ack');
@@ -162,11 +158,11 @@ export async function finish(p, content, postValue, guess = 5) {
   return { results: results.body, debrief: done.body };
 }
 
-export async function fullRun(app, content, { choose, preValue, postValue, guess } = {}) {
+export async function fullRun(app, content, { choose, preValue, postValue } = {}) {
   const p = participant(app);
   await toQuestions(p, content, preValue);
   const answers = await answerAll(p, content, choose);
-  const { results, debrief } = await finish(p, content, postValue, guess);
+  const { results, debrief } = await finish(p, content, postValue);
   const code = debrief.participant_code;
   // The arm comes from the database, never from what the API said.
   const arm = app.cqTestDb ? await armOf(app.cqTestDb, code) : undefined;

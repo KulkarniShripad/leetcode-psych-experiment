@@ -9,7 +9,6 @@ const survey = {
     { id: 'a', measure: 'confidence', type: 'scale', reverse: false, text: 'A', scale: seven },
     { id: 'b', measure: 'confidence', type: 'scale', reverse: true, text: 'B', scale: seven },
     { id: 'c', measure: 'enjoyment', type: 'scale', reverse: false, text: 'C', scale: { min: 1, max: 5, labels: {} } },
-    { id: 'q', measure: 'postdiction', type: 'scale', reverse: false, text: 'Q', scale: { min: 0, max: 9, labels: {} } },
     {
       id: 'm',
       measure: 'manipulation_check',
@@ -21,7 +20,6 @@ const survey = {
   ],
   phases: {
     pre: { title: 'Pre', intro: '', sections: [{ stem: 'How confident?', items: ['a', 'b'] }] },
-    post_a: { title: 'A', intro: '', sections: [{ items: ['q'] }] },
     post: { title: 'Post', intro: '', sections: [{ stem: 'How confident?', items: ['a', 'b'] }, { items: ['c', 'm'] }] },
   },
 };
@@ -30,7 +28,6 @@ const item = (id) => survey.items.find((i) => i.id === id);
 describe('survey layout', () => {
   it('lists items per phase in the order of the sections', () => {
     expect(itemsForPhase(survey, 'pre').map((i) => i.id)).toEqual(['a', 'b']);
-    expect(itemsForPhase(survey, 'post_a').map((i) => i.id)).toEqual(['q']);
     expect(itemsForPhase(survey, 'post').map((i) => i.id)).toEqual(['a', 'b', 'c', 'm']);
   });
 
@@ -60,7 +57,6 @@ describe('survey scoring', () => {
     // a = 5, b = 3 reversed to 5 -> mean 5
     expect(confidenceMean(survey, 'pre', { a: 5, b: 3 })).toBe(5);
     expect(confidenceMean(survey, 'post', { a: 4, b: 4 })).toBe(4);
-    expect(confidenceMean(survey, 'post_a', { q: 4 })).toBeNull();
   });
 
   it('gives conf_change of +1.0 for 4.0 pre and 5.0 post', () => {
@@ -87,7 +83,6 @@ describe('survey validation', () => {
       { item_id: 'c', value: 5 },
       { item_id: 'm', value: 3 },
     ]);
-    expect(validateSurveySubmission(survey, 'post_a', { q: 0 })).toEqual([{ item_id: 'q', value: 0 }]);
   });
 
   it('rejects a missing item', () => {
@@ -97,13 +92,12 @@ describe('survey validation', () => {
   it('rejects out-of-range, non-integer and unknown-option values', () => {
     expect(() => validateSurveySubmission(survey, 'pre', { a: 8, b: 4 })).toThrow(/outside the allowed range/);
     expect(() => validateSurveySubmission(survey, 'pre', { a: 0, b: 4 })).toThrow(/outside the allowed range/);
-    expect(() => validateSurveySubmission(survey, 'post_a', { q: 10 })).toThrow(/0 to 9/);
+    expect(() => validateSurveySubmission(survey, 'post', { a: 4, b: 4, c: 6, m: 1 })).toThrow(/1 to 5/);
     expect(() => validateSurveySubmission(survey, 'pre', { a: 4.5, b: 4 })).toThrow(expect.objectContaining({ code: 'VALIDATION' }));
     expect(() => validateSurveySubmission(survey, 'post', { a: 4, b: 4, c: 3, m: 4 })).toThrow(/choose one of the options/);
   });
 
   it('rejects answers to items that are not in this phase', () => {
     expect(() => validateSurveySubmission(survey, 'pre', { a: 4, b: 4, c: 3 })).toThrow(/unknown question/);
-    expect(() => validateSurveySubmission(survey, 'post_a', { q: 4, a: 4 })).toThrow(/unknown question/);
   });
 });

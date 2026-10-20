@@ -61,14 +61,8 @@ describe('resume after closing the tab', () => {
       expect(await counts(db)).toMatchObject({ questions: n, answered: n });
     }
 
-    // Part A (Q10) comes before any score.
-    await expectStep('POST_SURVEY_A');
-    expect((await fresh().get('/api/results')).status).toBe(409);
-    const partA = { answers: surveyAnswers(content, 'post_a', 7), idempotencyKey: key() };
-    await fresh().post('/api/survey/post_a', partA);
-    await fresh().post('/api/survey/post_a', partA);
     await expectStep('FINAL');
-    expect(await counts(db)).toMatchObject({ surveys: 9 });
+    expect(await counts(db)).toMatchObject({ surveys: 8 });
     const gameBefore = (await counts(db)).game;
 
     const r1 = (await fresh().get('/api/results')).body;
@@ -85,7 +79,7 @@ describe('resume after closing the tab', () => {
     await fresh().post('/api/survey/post', post);
     await fresh().post('/api/survey/post', post);
     await expectStep('DEBRIEF');
-    expect(await counts(db)).toMatchObject({ surveys: 19, questions: 9, answered: 9, slots: 1 });
+    expect(await counts(db)).toMatchObject({ surveys: 18, questions: 9, answered: 9, slots: 1 });
 
     const d1 = (await fresh().post('/api/complete')).body;
     const d2 = (await fresh().post('/api/complete')).body;

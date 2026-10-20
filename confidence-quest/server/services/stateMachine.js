@@ -4,14 +4,14 @@ import { AppError } from '../middleware/errors.js';
 import { nowIso, randomCode, randomToken, sha256, fillTemplate } from '../util.js';
 import { claimSlot, listFor } from './assignment.js';
 import { allowedOptions, isCorrect, scoreRaw } from './scoring.js';
-import { hasPhase, publicSurvey, validateSurveySubmission } from './surveyScoring.js';
+import { publicSurvey, validateSurveySubmission } from './surveyScoring.js';
 import * as game from './gamification.js';
 
 // S0 consent happens before a participant row exists, so it is not a stored step.
-// After Q9: POST_SURVEY_A (Q10, before any score) -> FINAL (score reveal) -> POST_SURVEY (Part B).
-export const STEPS = ['PRE_SURVEY', 'INSTRUCTIONS', 'QUESTION', 'FEEDBACK', 'POST_SURVEY_A', 'FINAL', 'POST_SURVEY', 'DEBRIEF'];
-const STAGE = { PRE_SURVEY: 1, INSTRUCTIONS: 2, QUESTION: 3, FEEDBACK: 3, POST_SURVEY_A: 4, FINAL: 5, POST_SURVEY: 6, DEBRIEF: 7 };
-const PHASE_STEP = { pre: 'PRE_SURVEY', post_a: 'POST_SURVEY_A', post: 'POST_SURVEY' };
+// After Q9: FINAL (score reveal) -> POST_SURVEY (post-test).
+export const STEPS = ['PRE_SURVEY', 'INSTRUCTIONS', 'QUESTION', 'FEEDBACK', 'FINAL', 'POST_SURVEY', 'DEBRIEF'];
+const STAGE = { PRE_SURVEY: 1, INSTRUCTIONS: 2, QUESTION: 3, FEEDBACK: 3, FINAL: 4, POST_SURVEY: 5, DEBRIEF: 6 };
+const PHASE_STEP = { pre: 'PRE_SURVEY', post: 'POST_SURVEY' };
 
 const notYourTurn = (message = 'That step is not available right now.') => new AppError('NOT_YOUR_TURN', message);
 
@@ -28,8 +28,6 @@ const SQL = {
 export function createStudy({ db, content }) {
   const { study, survey, gamification: gam, questions, questionsById, answerKey } = content;
   const totalQuestions = questions.length;
-  // Where participants go after the ninth question.
-  const afterQuestions = hasPhase(survey, 'post_a') ? 'POST_SURVEY_A' : 'FINAL';
 
   const participantById = (id, lock = false) =>
     db.get(`SELECT * FROM participants WHERE id = ?${lock ? db.forUpdate : ''}`, [id]);
@@ -82,7 +80,7 @@ export function createStudy({ db, content }) {
           [cur.id, qid],
         );
       }
-      await update(cur.id, { current_step: afterQuestions, current_question: null, questions_finished_at: shownAt });
+      await update(cur.id, { current_step: 'FINAL', current_question: null, questions_finished_at: shownAt });
       await logEvent(cur.id, 'time_expired', { at_position: cur.current_question });
       return participantById(cur.id);
     });
@@ -143,10 +141,10 @@ export function createStudy({ db, content }) {
     return state;
   }
 
-  // ---------- surveys: S1 (pre), Part A (post_a), Part B (post) ----------
+  // ---------- surveys: S1 (pre) and the post-test (post) ----------
 
   function assertPhaseStep(p, phase) {
-    if (!hasPhase(survey, phase) || p.current_step !== PHASE_STEP[phase]) throw notYourTurn();
+    if (p.current_step !== PHASE_STEP[phase]) throw notYourTurn();
   }
 
   async function getSurvey(participant, phase) {
@@ -180,7 +178,6 @@ export function createStudy({ db, content }) {
       }
       await logEvent(p.id, 'survey_submitted', { phase, items: rows.length });
       if (phase === 'pre') await assignArm(p, now);
-      else if (phase === 'post_a') await update(p.id, { current_step: 'FINAL' });
       else {
         await update(p.id, { current_step: 'DEBRIEF', status: 'completed', completed_at: now });
         await logEvent(p.id, 'completed');
@@ -273,7 +270,7 @@ export function createStudy({ db, content }) {
   // (a late repeat) it is simply wherever the participant is now.
   function nextAfter(p, position) {
     if (p.current_step === 'FEEDBACK' && p.current_question === position) {
-      return position < totalQuestions ? { step: 'QUESTION', n: position + 1 } : { step: afterQuestions };
+      return position < totalQuestions ? { step: 'QUESTION', n: position + 1 } : { step: 'FINAL' };
     }
     return p.current_question ? { step: p.current_step, n: p.current_question } : { step: p.current_step };
   }
@@ -366,7 +363,7 @@ export function createStudy({ db, content }) {
       assertActive(p);
       if (p.current_step === 'FEEDBACK' && p.current_question === n) {
         if (n < totalQuestions) await update(p.id, { current_step: 'QUESTION', current_question: n + 1 });
-        else await update(p.id, { current_step: afterQuestions, current_question: null });
+        else await update(p.id, { current_step: 'FINAL', current_question: null });
         await logEvent(p.id, 'feedback_ack', { n });
         return;
       }

@@ -15,7 +15,8 @@ export function loadConfig(env = process.env) {
     port: Number(env.PORT || 3000),
     host: env.HOST || '0.0.0.0',
     // Hosted: a Postgres connection string (Neon, Supabase, ...). Empty: a local SQLite file at DB_PATH.
-    databaseUrl: env.DATABASE_URL || '',
+    // POSTGRES_URL is what Vercel's Neon integration also sets.
+    databaseUrl: env.DATABASE_URL || env.POSTGRES_URL || '',
     pgSchema: env.PG_SCHEMA || undefined,
     pgPoolMax: Number(env.PG_POOL_MAX || 10),
     dbPath: fromRoot(env.DB_PATH || 'data/app.sqlite'),
@@ -26,7 +27,8 @@ export function loadConfig(env = process.env) {
     allocationSeed: env.ALLOCATION_SEED || '',
     initialStudyMode: env.STUDY_MODE === 'pilot' ? 'pilot' : 'live',
     secureCookies: env.SECURE_COOKIES ? env.SECURE_COOKIES === '1' : isProduction,
-    // Render sets RENDER=true; its free instances have no permanent disk.
-    onEphemeralHost: env.RENDER === 'true' || env.EPHEMERAL_DISK === '1',
+    // Render and Vercel (RENDER=true, VERCEL=1) keep no files between restarts or instances;
+    // the Dockerfile sets EPHEMERAL_DISK=1 for any other container host.
+    onEphemeralHost: env.RENDER === 'true' || Boolean(env.VERCEL) || env.EPHEMERAL_DISK === '1',
   };
 }

@@ -5,9 +5,8 @@ Usage:  pip install pandas statsmodels scipy
 
 1. Reliability of C1-C6 (Cronbach's alpha), before and after.
 2. Main test (H1): ANCOVA  post_conf_mean ~ arm_code + pre_conf_mean, plus the slopes check.
-3. Calibration (Q10 - score) by group.
-4. Manipulation check (Q12) by group.
-5. Q11, Q13, Q14 by group, and P1/P2 balance between the groups.
+3. Manipulation check (Q12) by group.
+4. Q11, Q13, Q14 by group, and P1/P2 balance between the groups.
 """
 import sys
 
@@ -40,14 +39,10 @@ print(f"   H1 (experimental gains more confidence): adjusted difference = {b:.3f
 slopes = smf.ols("post_conf_mean ~ arm_code * pre_conf_mean", data=df).fit()
 print(f"   Homogeneity of slopes (should be non-significant): interaction p = {slopes.pvalues['arm_code:pre_conf_mean']:.3f}")
 
-print("\n3. Calibration (Q10 guess - actual score; + = overestimate)")
-print(df.groupby("arm")["calibration_gap"].agg(["mean", "std"]).round(3))
-print(f"   |gap| by group: {df.assign(abs_gap=df['calibration_gap'].abs()).groupby('arm')['abs_gap'].mean().round(3).to_dict()}")
-
-print("\n4. Manipulation check: Q12 'did you see badges, tokens or a leaderboard?'")
+print("\n3. Manipulation check: Q12 'did you see badges, tokens or a leaderboard?'")
 print(pd.crosstab(df["arm"], df["Q12_label"]))
 
-print("\n5. Other post items by group (Mann-Whitney U)")
+print("\n4. Other post items by group (Mann-Whitney U)")
 for item in ("Q11", "Q13", "Q14"):
     if item not in df:
         continue

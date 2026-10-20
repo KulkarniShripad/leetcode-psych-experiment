@@ -1,12 +1,8 @@
 import { AppError } from '../middleware/errors.js';
 import { SURVEY_PHASES } from './content.js';
 
-// Surveys are laid out per phase in survey.json: pre (before the questions), post_a (right
-// after Q9, before any score) and post (after the score). Items keep the order they are listed in.
-
-export function hasPhase(survey, phase) {
-  return Boolean(survey.phases[phase]);
-}
+// Surveys are laid out per phase in survey.json: pre (before the questions) and post (after
+// the score). Items keep the order they are listed in.
 
 export function itemsForPhase(survey, phase) {
   const spec = survey.phases[phase];

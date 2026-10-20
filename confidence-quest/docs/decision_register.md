@@ -19,41 +19,38 @@ placeholders show up as warnings on server start and on the admin status page.
 | D5 | Badges | Eight: three effort badges everyone can get (Off the Mark, Halfway There, Finisher) and five performance badges (Hot Streak, Window Master, Pointer Pro, Array Ace, Perfect Run). Locked badges are shown greyed out on the results screen. | `gamification.json` → `badges.definitions`. Rule types: `answered_count`, `correct_count`, `correct_streak`, `section_all_correct`; icons: star, flame, bolt, trophy, target, medal, rocket, crown. |
 | D6 | Leaderboard: who, names, size, ties, refresh | Top 5 + the participant's own row; random pseudonyms ("Swift Otter"); ranked by tokens; ties → earlier finish; computed live when the final screen opens; only real experimental participants who finished the nine questions | `gamification.json` → `leaderboard` (`enabled`, `metric`, `top_n`, `include_self_row`, `tie_break`: `earlier_finish` / `less_total_time` / `shared`, `names`, `include_pilot_results`) |
 | D7 | Rank / percentile | Both: "You are ranked 3 of 12." + "That puts you in the top 25%." Hidden while someone is alone on the board (still recorded). Confetti on the results screen for the top half or a perfect run. | `gamification.json` → `rank.show`: `none` / `rank` / `percentile` / `both`, plus the text templates; `final.confetti_top_percent` |
-| D8 | Score reveal (both groups) | **Decided:** both groups see "Your result" and "You answered X of 9 correctly." in identical wording and layout, after Part A (Q10). The experimental group also sees its tokens, level, badges, rank/percentile and the leaderboard below that line. | `study.json` → `final_screen` |
-| D9 | Survey items, scales and order | **Decided (final questionnaires):** pre C1-C6 + P1-P2; Part A Q10 right after Q9; Part B C1-C6 (identical) + Q11, Q13, Q14, Q12. All items required. See "Questionnaire review" below. | `survey.json` (`items`, `scales`, `phases`). To cut Q13/Q14, remove them from `phases.post`. |
-| D10 | Time limit and what happens at expiry | Off. When on: one total limit from "Start question 1"; at expiry every unanswered question is stored as expired (no answer, incorrect) and the participant goes on to Part A (Q10), then the score. A countdown shows in the top bar. | `study.json` → `questions.time_limit` (`enabled`, `total_seconds`) |
+| D8 | Score reveal (both groups) | **Decided:** both groups see "Your result" and "You answered X of 9 correctly." in identical wording and layout, right after Q9. The experimental group also sees its tokens, level, badges, rank/percentile and the leaderboard below that line. | `study.json` → `final_screen` |
+| D9 | Survey items, scales and order | **Decided (final questionnaires):** pre C1-C6 + P1-P2; post (after the score) C1-C6 (identical) + Q11, Q13, Q14, Q12. All items required. Q10 ("how many do you think you got right?") was removed. See "Questionnaire review" below. | `survey.json` (`items`, `scales`, `phases`). To cut Q13/Q14, remove them from `phases.post`. |
+| D10 | Time limit and what happens at expiry | Off. When on: one total limit from "Start question 1"; at expiry every unanswered question is stored as expired (no answer, incorrect) and the participant goes on to the score. A countdown shows in the top bar. | `study.json` → `questions.time_limit` (`enabled`, `total_seconds`) |
 | D11 | Q5 context; showing Easy/Medium/Hard labels | Q5 shown verbatim with no extra context; labels hidden from participants (still used for tokens) | Add a `note` field to Q5 in `questions.json` (shown under the code) — this changes the verbatim content, so also update Appendix A. Labels: `study.json` → `questions.show_difficulty_labels`. |
 | D12 | Question order | Fixed Q1 → Q9 for everyone | `study.json` → `questions.order`: `fixed` or `random_per_participant` (each participant's order is stored) |
 | D13 | Allocation: block size, slot count, pilot list | Block size **2**, 60 main slots, separate 20-slot pilot list; extends by whole blocks if it ever runs out | `study.json` → `allocation`; seed via `ALLOCATION_SEED`. Locked into the database at first start. |
 | D14 | Session size, timing, rooms, devices, eligibility | Not an app setting | `docs/experiment_day_runbook.md` |
-| D15 | Hosting; no IP logging on the host | **Free hosting:** Render (web server) + Neon (Postgres, where all data lives). The app never logs IPs/user agents; Render keeps its own short-lived request logs. Laptop fallback with local SQLite. | [`hosting.md`](hosting.md) |
+| D15 | Hosting; no IP logging on the host | **Free hosting:** Vercel (runs the app's container) + Neon (Postgres, where all data lives); Render as an alternative. The app never logs IPs/user agents; the host keeps its own short-lived request logs. Laptop fallback with local SQLite. | [`hosting.md`](hosting.md) |
 | D17 | Weighted points for the leaderboard | Leaderboard ranks by tokens (= weighted points 1/2/3); `score_raw` (out of 9) is always recorded separately | `gamification.json` → `leaderboard.metric`: `tokens` or `score_raw` |
 | D18 | Linking interviews | Only through the participant code the participant chooses to share; the app stores nothing else | Debrief text in `study.json` |
 
 ## Questionnaire review (final questionnaires)
 
-The final questionnaires are implemented exactly as specified, with these checks and three
-deliberate decisions:
+The final questionnaires are implemented as specified, with these checks and decisions:
 
 - **C1-C6 identical before and after.** Same stem ("How confident are you that you can do each
   of the following right now?"), same 1-7 scale and anchors, same wording, same order. The
   server refuses to start if `survey.json` ever breaks this (a test also checks it), because
   the change score and the ANCOVA depend on it. They are task-specific self-efficacy items
   ("how confident ... that you can ..."), which suits a change score over one session.
-- **Q10 before any score.** Part A is its own screen right after Q9; the score endpoint is
-  locked until Q10 is answered. Calibration = Q10 - actual score.
-- **Q12 moved to the very end of Part B (decision 1).** The list order put Q12 before Q13/Q14,
+- **Q10 removed.** The guess of the score ("how many do you think you got right?") was
+  dropped as not useful, together with its separate screen and the calibration measure.
+  Participants go straight from Q9 to the score.
+- **Q12 moved to the very end of the post-test.** The list order put Q12 before Q13/Q14,
   but the rule says Q12 is the only item that mentions badges, tokens or a leaderboard and it
   comes last. Asking it before Q13 (pressure) and Q14 (enjoyment) could change those answers,
   especially for the control group, so the order is C1-C6, Q11, Q13, Q14, **Q12**. To restore
   the listed order, swap them in `phases.post` in `survey.json`.
-- **The per-question right/wrong dots are switched off in the game bar (decision 2).** With
-  them, the experimental group could simply count nine dots before Q10 while the control
-  group has to remember; that would make calibration differ by design rather than by
-  confidence. Both groups still get "Correct/Incorrect" after each question, so Q10 is partly
-  a memory measure for everyone; keep this in mind when interpreting calibration.
+- **The per-question right/wrong dots in the game bar are on.** They were off only so the
+  experimental group could not count its score before Q10; with Q10 gone they are back.
   (`gamification.json` → `hud.show_answer_dots`.)
-- **Score sentence shortened to the exact wording (decision 3):** "You answered X of 9 correctly."
+- **Score sentence uses the exact wording:** "You answered X of 9 correctly."
 - **No game words anywhere in the surveys except Q12** (checked by a test), and no personal
   data (no name, email, ID, gender or age).
 - **Q11 is asked right after the experimental group has seen its rank**, so a group difference
