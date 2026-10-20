@@ -21,13 +21,10 @@ model <- lm(post_conf_mean ~ arm_code + pre_conf_mean, data = df)  # H1: positiv
 print(summary(model))
 print(anova(lm(post_conf_mean ~ arm_code * pre_conf_mean, data = df)))  # slopes check
 
-cat("\n3. Calibration (Q10 - score) by group\n")
-print(aggregate(calibration_gap ~ arm, data = df, FUN = mean))
-
-cat("\n4. Manipulation check (Q12)\n")
+cat("\n3. Manipulation check (Q12)\n")
 print(table(df$arm, df$Q12_label))
 
-cat("\n5. Q11, Q13, Q14 by group\n")
+cat("\n4. Q11, Q13, Q14 by group\n")
 for (item in intersect(c("Q11", "Q13", "Q14"), names(df))) {
   print(item)
   print(wilcox.test(df[[item]] ~ df$arm))

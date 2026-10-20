@@ -67,7 +67,7 @@ describe('content files', () => {
     const { survey } = loadContent(CONTENT_DIR);
     const ids = (phase) => itemsForPhase(survey, phase).map((i) => i.id);
     expect(ids('pre')).toEqual(['C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'P1', 'P2']);
-    expect(ids('post_a')).toEqual(['Q10']);
+    expect(Object.keys(survey.phases)).toEqual(['pre', 'post']);
     // Q12 is the only item that names badges, tokens or a leaderboard, so it comes last.
     expect(ids('post')).toEqual(['C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'Q11', 'Q13', 'Q14', 'Q12']);
     expect(survey.phases.pre.intro).toBe(
@@ -79,7 +79,7 @@ describe('content files', () => {
     const { survey } = loadContent(CONTENT_DIR);
     const words = /\b(gamif\w*|badges?|tokens?|leaderboards?|points?|streaks?|levels?|rank(s|ed|ing)?)\b/i;
     const texts = [];
-    for (const phase of ['pre', 'post_a', 'post']) {
+    for (const phase of ['pre', 'post']) {
       const spec = survey.phases[phase];
       texts.push(spec.title, spec.intro, ...spec.sections.flatMap((s) => [s.title ?? '', s.stem ?? '']));
       for (const item of itemsForPhase(survey, phase)) {
@@ -117,7 +117,7 @@ describe('content files', () => {
     expect(problemsFor(dropped).join('\n')).toMatch(/C6 is not asked in phases\.pre/);
   });
 
-  it('fails if a survey references an unknown item or scale, or Q10 is not 0-9', () => {
+  it('fails if a survey references an unknown item or scale, or adds a phase', () => {
     const unknownItem = contentCopy({
       'survey.json': (json) => {
         json.phases.post.sections[1].items.push('Q99');
@@ -130,12 +130,12 @@ describe('content files', () => {
       },
     });
     expect(problemsFor(unknownScale)).toEqual([expect.stringMatching(/scale: no scale called "agree_5"/)]);
-    const badGuess = contentCopy({
+    const extraPhase = contentCopy({
       'survey.json': (json) => {
-        json.scales.count_0_9.max = 10;
+        json.phases.post_a = { title: 'One quick question', sections: [{ items: ['Q11'] }] };
       },
     });
-    expect(problemsFor(badGuess)).toEqual(['survey.json: Q10.scale: the postdiction scale must run from 0 to 9']);
+    expect(problemsFor(extraPhase)).toEqual([expect.stringMatching(/^survey\.json: phases: .*post_a/)]);
   });
 
   it('names the file and field for each kind of problem', () => {

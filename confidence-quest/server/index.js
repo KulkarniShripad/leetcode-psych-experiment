@@ -9,8 +9,8 @@ async function main() {
     console.error('Refusing to start: set ADMIN_TOKEN (at least 16 characters) in production.');
     process.exit(1);
   }
-  // Free cloud hosts (Render) wipe the server's disk on every restart and deploy: a local
-  // SQLite file there would lose answers. The hosted study must use a cloud database.
+  // Cloud hosts (Render, Vercel) wipe the server's disk on every restart and deploy, and Vercel
+  // runs several copies: a local SQLite file there would lose answers. Use a cloud database.
   if (config.onEphemeralHost && !config.databaseUrl) {
     console.error('Refusing to start: this host has no permanent disk. Set DATABASE_URL to your cloud Postgres database (see docs/hosting.md).');
     process.exit(1);

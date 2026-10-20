@@ -1,13 +1,12 @@
 {
   "status": "approved",
-  "note": "Final questionnaires. Pre-test (8 items): C1-C6 then P1-P2. Post-test Part A (Q10) comes right after Q9, before any score is shown. Part B (after the score reveal): C1-C6 with the same stem, scale, wording and order as the pre-test, then Q11, Q13, Q14 and Q12 last, because Q12 is the only item that mentions badges, tokens or a leaderboard. To cut Q13/Q14 if time is tight, remove them from phases.post; nothing else changes.",
+  "note": "Final questionnaires. Pre-test (8 items): C1-C6 then P1-P2. Post-test (after the score reveal): C1-C6 with the same stem, scale, wording and order as the pre-test, then Q11, Q13, Q14 and Q12 last, because Q12 is the only item that mentions badges, tokens or a leaderboard. To cut Q13/Q14 if time is tight, remove them from phases.post; nothing else changes.",
   "scales": {
     "confidence_7": {
       "min": 1,
       "max": 7,
       "labels": { "1": "Not at all confident", "4": "Moderately confident", "7": "Extremely confident" }
     },
-    "count_0_9": { "min": 0, "max": 9, "labels": {} },
     "compare_7": {
       "min": 1,
       "max": 7,
@@ -53,12 +52,6 @@
       ]
     },
     {
-      "id": "Q10",
-      "measure": "postdiction",
-      "scale": "count_0_9",
-      "text": "Out of the nine questions you just answered, how many do you think you got right?"
-    },
-    {
       "id": "Q11",
       "measure": "relative_performance",
       "scale": "compare_7",
@@ -89,11 +82,6 @@
         },
         { "title": "About your coding practice", "items": ["P1", "P2"] }
       ]
-    },
-    "post_a": {
-      "title": "One quick question",
-      "intro": "",
-      "sections": [{ "items": ["Q10"] }]
     },
     "post": {
       "title": "A few last questions",

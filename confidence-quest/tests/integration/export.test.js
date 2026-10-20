@@ -39,9 +39,8 @@ describe('exports', () => {
     expect(rows).toHaveLength(4);
     expect(Object.keys(rows[0])).toEqual([
       'participant_code', 'arm', 'arm_code', 'status', 'last_step', 'started_at_utc', 'completed_at_utc', 'duration_s',
-      'questions_answered', 'score_raw', 'pre_conf_mean', 'post_conf_mean', 'conf_change', 'calibration_gap',
+      'questions_answered', 'score_raw', 'pre_conf_mean', 'post_conf_mean', 'conf_change',
       'C1_pre', 'C2_pre', 'C3_pre', 'C4_pre', 'C5_pre', 'C6_pre', 'P1', 'P1_label', 'P2', 'P2_label',
-      'Q10',
       'C1_post', 'C2_post', 'C3_post', 'C4_post', 'C5_post', 'C6_post', 'Q11', 'Q13', 'Q14', 'Q12', 'Q12_label',
       'tokens_total', 'badges_earned', 'best_streak', 'level_reached', 'rank_shown', 'rank_pool_size', 'consent_version',
     ]);
@@ -49,8 +48,6 @@ describe('exports', () => {
     const first = byCode[runs[0].code];
     // 3 on every confidence item before, 5 after: means 3 and 5, change +2.
     expect(first).toMatchObject({ status: 'completed', score_raw: '9', questions_answered: '9', pre_conf_mean: '3', post_conf_mean: '5', conf_change: '2' });
-    // Q10 guess 5 with 9 actually right: calibration -4 (underestimated).
-    expect(first).toMatchObject({ Q10: '5', calibration_gap: '-4' });
     expect(first).toMatchObject({ C1_pre: '3', C6_pre: '3', C1_post: '5', P1: '3', P1_label: '26-100', P2: '3', P2_label: '1-3 days a week' });
     expect(first).toMatchObject({ Q11: '5', Q13: '5', Q14: '5', Q12: '1', Q12_label: 'Yes' });
     expect(byCode[runs[3].code].score_raw).toBe('0');
@@ -74,13 +71,12 @@ describe('exports', () => {
     ]);
     expect(questions[0]).toMatchObject({ question_id: 'Q1', section: 'Sliding Window', response_status: 'answered' });
     const surveys = parseCsv(await exportCsv(app, 'surveys'));
-    // 8 pre + 1 Part A + 10 Part B per participant.
-    expect(surveys).toHaveLength(4 * 19);
+    // 8 pre + 10 post per participant.
+    expect(surveys).toHaveLength(4 * 18);
     expect(Object.keys(surveys[0]).slice(0, 6)).toEqual(['participant_code', 'arm', 'phase', 'item_id', 'value', 'value_label']);
     const first = surveys.filter((r) => r.participant_code === surveys[0].participant_code);
     expect(first.map((r) => `${r.phase}:${r.item_id}`)).toEqual([
       ...['C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'P1', 'P2'].map((id) => `pre:${id}`),
-      'post_a:Q10',
       ...['C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'Q11', 'Q13', 'Q14', 'Q12'].map((id) => `post:${id}`),
     ]);
     expect(first.find((r) => r.item_id === 'P1')).toMatchObject({ value: '3', value_label: '26-100', measure: 'prior_experience' });
@@ -152,13 +148,20 @@ describe('exports', () => {
     }
   });
 
-  it('calibration uses the Q10 guess against the real score; cutting Q13/Q14 removes their columns', async () => {
-    const { app, content } = await makeApp();
-    // 4 of 9 right (even positions), guessed 7: overestimated by 3.
-    const run = await fullRun(app, content, { choose: (id, n) => (n % 2 ? wrongLetter(ANSWER_KEY[id]) : ANSWER_KEY[id]), guess: 7 });
+  it('Q10 answers left in an early test database do not break the exports', async () => {
+    const { app, db, content } = await makeApp();
+    // 4 of 9 right (even positions).
+    const run = await fullRun(app, content, { choose: (id, n) => (n % 2 ? wrongLetter(ANSWER_KEY[id]) : ANSWER_KEY[id]) });
+    const { id } = await db.get('SELECT id FROM participants WHERE participant_code = ?', [run.code]);
+    await db.run("INSERT INTO survey_responses (participant_id, phase, item_id, value, submitted_at) VALUES (?, 'post_a', 'Q10', 7, 'x')", [id]);
     const row = parseCsv(await exportCsv(app, 'participants')).find((r) => r.participant_code === run.code);
-    expect(row).toMatchObject({ score_raw: '4', Q10: '7', calibration_gap: '3' });
+    expect(row).toMatchObject({ score_raw: '4', C1_post: '4' });
+    expect(row).not.toHaveProperty('Q10');
+    const surveys = parseCsv(await exportCsv(app, 'surveys')).filter((r) => r.participant_code === run.code);
+    expect(surveys.at(-1)).toMatchObject({ phase: 'post_a', item_id: 'Q10', value: '7', measure: '' });
+  });
 
+  it('cutting Q13/Q14 removes their columns', async () => {
     const dir = contentCopy({
       'survey.json': (s) => {
         s.phases.post.sections[1].items = ['Q11', 'Q12'];

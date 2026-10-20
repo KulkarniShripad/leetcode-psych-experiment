@@ -104,7 +104,7 @@ describe('database rules', () => {
     await expect(
       db.run("INSERT INTO question_responses (participant_id, question_id, position, shown_at) VALUES (?, 'Q1', 1, ?)", [id, now]),
     ).rejects.toThrow(unique);
-    // Part A answers have their own phase.
+    // post_a (Q10, no longer asked) stays a valid phase so early databases keep their rows.
     await db.run("INSERT INTO survey_responses (participant_id, phase, item_id, value, submitted_at) VALUES (?, 'post_a', 'Q10', 6, ?)", [id, now]);
     await expect(
       db.run("INSERT INTO survey_responses (participant_id, phase, item_id, value, submitted_at) VALUES (?, 'later', 'Q10', 6, ?)", [id, now]),
@@ -137,8 +137,8 @@ describe('time limit (D10, off by default)', () => {
     // Move the start back two minutes, as if time ran out.
     await db.run('UPDATE participants SET questions_started_at = ?', [new Date(Date.now() - 120000).toISOString()]);
     const state = await p.get('/api/state');
-    // Time is up: on to Part A (Q10), then the score.
-    expect(state.body.step).toBe('POST_SURVEY_A');
+    // Time is up: on to the score.
+    expect(state.body.step).toBe('FINAL');
     const late = await p.post('/api/answer', { questionId: 'Q2', selectedOption: ANSWER_KEY.Q2, idempotencyKey: key() });
     expect(late.body).toMatchObject({ correct: false, expired: true });
 

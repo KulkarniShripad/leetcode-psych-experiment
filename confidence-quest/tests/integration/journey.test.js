@@ -63,8 +63,7 @@ describe('full runs, both arms', () => {
     expect(exp.answers.map((a) => a.game.streak.current)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
     expect(exp.answers[2].game.overlay.title).toBe('On fire!');
     expect(exp.answers[8].game.badges.new.map((b) => b.key)).toEqual(['array_ace', 'finisher', 'perfect_run']);
-    // No green/red answer dots: they would let this group count its score before Q10.
-    expect(exp.answers[8].game.hud).not.toHaveProperty('history');
+    expect(exp.answers[8].game.hud.history).toEqual(Array(9).fill('correct'));
     expect(exp.results.game.tokens.total).toBe(26);
     expect(exp.results.game.level).toMatchObject({ number: 5, name: 'Legend' });
     expect(exp.results.game.badges.all.every((b) => b.earned)).toBe(true);

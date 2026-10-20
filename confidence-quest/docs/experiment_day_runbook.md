@@ -5,7 +5,7 @@ Session size, timing, rooms, devices and eligibility are decision D14 — fill t
 
 ## The week before
 
-- [ ] The app is online: follow [`hosting.md`](hosting.md) (Render + Neon, free). The status page says **Data is stored in: Cloud Postgres database**.
+- [ ] The app is online: follow [`hosting.md`](hosting.md) (Vercel + Neon, free). The status page says **Data is stored in: Cloud Postgres database**.
 - [ ] All `[TEAM]` placeholders replaced; `study.json`, `gamification.json` set to `"status": "approved"` (`survey.json` already is).
 - [ ] `npm run check:content` shows **no warnings**.
 - [ ] `ALLOCATION_SEED` chosen and written down; set on the host **before the first start**.
@@ -19,7 +19,7 @@ Session size, timing, rooms, devices and eligibility are decision D14 — fill t
 
 1. **Wake the free server 10 minutes early:** open the participant link once (the first load can take a minute).
    Then open `https://<host>/healthz` → `{"ok":true,"storage":"postgres",...}`.
-   Render → Settings: **Auto-Deploy Off** for the day.
+   Nobody merges anything into `main` today (a merge redeploys the app mid-session).
 2. Open `https://<host>/admin`, enter the admin token.
    - Mode shows **LIVE**.
    - Live participants: **0** (or the count from earlier sessions).

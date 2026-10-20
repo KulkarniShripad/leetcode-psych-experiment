@@ -64,23 +64,20 @@ export async function participantsCsv(db, content, pilot = false) {
   );
   const surveys = groupBy(await db.all('SELECT * FROM survey_responses'), 'participant_id');
   const views = groupBy(await db.all("SELECT * FROM gamification_events WHERE type = 'leaderboard_view' ORDER BY id"), 'participant_id');
-  const postdiction = SURVEY_PHASES.flatMap((phase) => itemsForPhase(survey, phase).map((item) => ({ item, phase }))).find(
-    (e) => e.item.measure === 'postdiction',
-  );
   const items = itemColumns(survey);
 
   const columns = [
     'participant_code', 'arm', 'arm_code', 'status', 'last_step', 'started_at_utc', 'completed_at_utc', 'duration_s',
     'questions_answered', 'score_raw', 'pre_conf_mean', 'post_conf_mean', 'conf_change',
+    ...items.map((c) => c.name),
+    'tokens_total', 'badges_earned', 'best_streak', 'level_reached', 'rank_shown', 'rank_pool_size', 'consent_version',
   ];
-  if (postdiction) columns.push('calibration_gap');
-  columns.push(...items.map((c) => c.name));
-  columns.push('tokens_total', 'badges_earned', 'best_streak', 'level_reached', 'rank_shown', 'rank_pool_size', 'consent_version');
 
   const rows = people.map((p) => {
     const answered = responses.get(p.id) ?? [];
     const values = Object.fromEntries(SURVEY_PHASES.map((phase) => [phase, {}]));
-    for (const s of surveys.get(p.id) ?? []) values[s.phase][s.item_id] = s.value;
+    // Answers from a phase no longer asked (Q10 in an early test database) are skipped here.
+    for (const s of surveys.get(p.id) ?? []) if (values[s.phase]) values[s.phase][s.item_id] = s.value;
     const pre = measureMean(survey, 'confidence', 'pre', values.pre);
     const post = measureMean(survey, 'confidence', 'post', values.post);
     const score = p.questions_finished_at !== null ? scoreRaw(answered) : null;
@@ -100,10 +97,6 @@ export async function participantsCsv(db, content, pilot = false) {
       conf_change: pre !== null && post !== null ? post - pre : null,
       consent_version: p.consent_version,
     };
-    if (postdiction) {
-      const guess = values[postdiction.phase][postdiction.item.id];
-      row.calibration_gap = guess !== undefined && score !== null ? guess - score : null;
-    }
     for (const c of items) {
       const value = values[c.phase][c.item.id];
       row[c.name] = value === undefined ? null : c.label ? optionLabel(c.item, value) : value;
@@ -159,10 +152,10 @@ export async function surveysCsv(db, content, pilot = false) {
      WHERE p.is_pilot = ? ORDER BY p.started_at, p.id, s.id`,
     [pilot ? 1 : 0],
   );
-  // Participants in start order; within each, pre -> post_a -> post, then the order items were stored.
+  // Participants in start order; within each, pre -> post, then the order items were stored.
   const personIndex = new Map();
   for (const r of raw) if (!personIndex.has(r.participant_code)) personIndex.set(r.participant_code, personIndex.size);
-  const sortKey = (r) => [personIndex.get(r.participant_code), phaseOrder[r.phase], r.id];
+  const sortKey = (r) => [personIndex.get(r.participant_code), phaseOrder[r.phase] ?? SURVEY_PHASES.length, r.id];
   const rows = raw
     .sort((a, b) => {
       const [ka, kb] = [sortKey(a), sortKey(b)];
