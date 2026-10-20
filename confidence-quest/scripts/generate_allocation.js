@@ -43,13 +43,13 @@ if (flag('preview')) {
   process.exit(0);
 }
 
-const { db, warnings } = bootstrap(config);
+const { db, warnings } = await bootstrap(config);
 for (const w of warnings.filter((w) => !w.includes('not approved') && !w.includes('placeholder') && !w.includes('PLACEHOLDER'))) {
   console.warn(`[warning] ${w}`);
 }
-const rows = db.prepare('SELECT list, seq_no, block_no, arm, claimed_by FROM allocation_slots ORDER BY list, seq_no').all();
-console.log(`Seed: ${getMeta(db, 'allocation_seed')} (source: ${getMeta(db, 'allocation_seed_source')})`);
-console.log(`Block size: ${getMeta(db, 'allocation_block_size')}`);
+const rows = await db.all('SELECT list, seq_no, block_no, arm, claimed_by FROM allocation_slots ORDER BY list, seq_no');
+console.log(`Seed: ${await getMeta(db, 'allocation_seed')} (source: ${await getMeta(db, 'allocation_seed_source')})`);
+console.log(`Block size: ${await getMeta(db, 'allocation_block_size')}`);
 for (const list of ['main', 'pilot']) {
   const slots = rows.filter((r) => r.list === list);
   if (!slots.length) continue;
@@ -57,4 +57,4 @@ for (const list of ['main', 'pilot']) {
   console.log(`\n${list} list: ${slots.length} slots, ${claimed} claimed`);
   console.log(slots.map((s) => (s.arm === 'control' ? 'C' : 'E')).join(''));
 }
-db.close();
+await db.close();

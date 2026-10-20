@@ -1,11 +1,21 @@
 import { h, mount } from './dom.js';
 
-// The one admin page: counts by arm and step, exports, backup, pilot/live switch.
+// The one admin page: where data is stored, counts by arm and step, exports, backup download, pilot/live switch.
 // The token is kept in sessionStorage for this tab only.
 
 const TOKEN_KEY = 'cq_admin_token';
 const EXPORTS = ['participants', 'questions', 'surveys', 'events', 'gamification', 'allocation', 'meta'];
-const STEPS = ['PRE_SURVEY', 'INSTRUCTIONS', 'QUESTION', 'FEEDBACK', 'FINAL', 'POST_SURVEY', 'DEBRIEF'];
+// The server sends the steps in order; these are just friendlier column headings.
+const STEP_LABELS = {
+  PRE_SURVEY: 'Pre-test',
+  INSTRUCTIONS: 'Instructions',
+  QUESTION: 'Question',
+  FEEDBACK: 'Feedback',
+  POST_SURVEY_A: 'Part A (Q10)',
+  FINAL: 'Score',
+  POST_SURVEY: 'Part B',
+  DEBRIEF: 'Debrief',
+};
 
 const dashboard = document.getElementById('dashboard');
 const login = document.getElementById('login');
@@ -62,19 +72,20 @@ function armTable(summary) {
 }
 
 function stepTable(summary) {
+  const steps = Object.keys(summary.by_step);
   return h(
     'table',
     { class: 'status' },
-    h('thead', {}, h('tr', {}, h('th', {}, 'In progress at step'), STEPS.map((s) => h('th', {}, s.replace('_', ' '))))),
-    h('tbody', {}, h('tr', {}, h('td', {}, 'participants'), STEPS.map((s) => h('td', {}, String(summary.by_step[s] ?? 0))))),
+    h('thead', {}, h('tr', {}, h('th', {}, 'In progress at step'), steps.map((s) => h('th', {}, STEP_LABELS[s] ?? s)))),
+    h('tbody', {}, h('tr', {}, h('td', {}, 'participants'), steps.map((s) => h('td', {}, String(summary.by_step[s] ?? 0))))),
   );
 }
 
-async function download(name, cohort) {
+async function saveFile(url, fallbackName) {
   try {
-    const res = await call('GET', `/admin/api/export/${name}.csv${cohort === 'pilot' ? '?cohort=pilot' : ''}`);
+    const res = await call('GET', url);
     const blob = await res.blob();
-    const filename = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ?? `${name}.csv`;
+    const filename = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ?? fallbackName;
     const a = h('a', { href: URL.createObjectURL(blob), download: filename });
     document.body.append(a);
     a.click();
@@ -82,6 +93,14 @@ async function download(name, cohort) {
   } catch (err) {
     showError(err.message);
   }
+}
+
+const download = (name, cohort) => saveFile(`/admin/api/export/${name}.csv${cohort === 'pilot' ? '?cohort=pilot' : ''}`, `${name}.csv`);
+
+function storageLine(storage) {
+  return storage.kind === 'postgres'
+    ? `Cloud Postgres database (${storage.host}). Every answer is saved there the moment it is submitted.`
+    : `Local SQLite file (${storage.file}) on this computer.`;
 }
 
 async function action(fn) {
@@ -110,6 +129,7 @@ function render(s) {
       ' ',
       h('span', { class: 'muted' }, s.study_mode === 'pilot' ? '(new participants are pilot rows, excluded from exports)' : '(new participants are research data)'),
     ),
+    h('p', { class: 'small-print' }, 'Data is stored in: ', h('strong', {}, storageLine(s.storage))),
     s.content.warnings.length ? h('ul', { class: 'warnings' }, s.content.warnings.map((w) => h('li', {}, w))) : null,
     h(
       'div',
@@ -143,11 +163,7 @@ function render(s) {
       h(
         'div',
         { class: 'admin-row' },
-        h('button', { type: 'button', class: 'secondary', onclick: () => action(async () => {
-          const res = await call('POST', '/admin/api/backup');
-          const data = await res.json();
-          window.alert(`Backup saved: ${data.file}`);
-        }) }, 'Back up database now'),
+        h('button', { type: 'button', class: 'secondary', onclick: () => saveFile('/admin/api/backup.json', 'confidence-quest-backup.json') }, 'Download full backup'),
         h('button', { type: 'button', class: 'secondary', onclick: () => {
           const mode = s.study_mode === 'pilot' ? 'live' : 'pilot';
           if (window.confirm(`Switch to ${mode.toUpperCase()} mode?`)) action(() => call('POST', '/admin/api/mode', { mode }));

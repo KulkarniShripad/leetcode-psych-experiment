@@ -193,9 +193,16 @@ input:focus-visible {
   border-color: var(--incorrect);
   background: var(--incorrect-bg);
 }
+/* The question text sits inside the box (a plain legend would cut through the border when it wraps). */
 .likert legend {
-  padding: 0 4px;
+  float: left;
+  width: 100%;
+  padding: 0;
+  margin-bottom: 4px;
   font-weight: 500;
+}
+.likert legend + * {
+  clear: both;
 }
 .item-number {
   color: var(--muted);
@@ -245,6 +252,35 @@ input:focus-visible {
     text-align: left;
   }
 }
+
+/* Survey sections: a shared question stem shown once above its items */
+.survey-section { margin-bottom: 8px; }
+.survey-section + .survey-section { margin-top: 26px; }
+.survey-section-title { font-size: 1.1rem; margin: 0 0 12px; }
+.survey-stem {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  background: var(--bg);
+  border-radius: 8px;
+  font-weight: 600;
+}
+.likert-options.wide { grid-auto-columns: minmax(0, 1fr); }
+.choice-options { display: grid; gap: 8px; margin-top: 8px; }
+.choice-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.choice-option:hover { border-color: var(--accent); }
+.choice-option:has(input:checked) {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+}
+.choice-option input { width: 18px; height: 18px; margin: 0; flex: none; }
 
 .form-error {
   color: var(--incorrect);

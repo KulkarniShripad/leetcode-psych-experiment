@@ -35,9 +35,9 @@ export function createApp({ db, content, config, startedAt = Date.now() }) {
   });
   app.use(loadParticipant(db));
 
-  app.get('/healthz', (req, res) => {
-    db.prepare('SELECT 1').get();
-    res.json({ ok: true, uptime_s: Math.round((Date.now() - startedAt) / 1000) });
+  app.get('/healthz', async (req, res) => {
+    await db.get('SELECT 1 AS ok');
+    res.json({ ok: true, storage: db.dialect, uptime_s: Math.round((Date.now() - startedAt) / 1000) });
   });
 
   app.use(sessionRoutes({ study, config }));

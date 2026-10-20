@@ -118,7 +118,7 @@ describe('full-screen feedback, HUD and live rank', () => {
     expect(feedbackGame(g, computeGameState(g, questions, allCorrect), 1)).not.toHaveProperty('overlay');
   });
 
-  it('the HUD shows tokens, streak, level, badges and one dot per answered question', () => {
+  it('the HUD shows tokens, streak, level and badges, without answer dots by default', () => {
     const state = computeGameState(gam(), questions, responses((id, n) => (n === 2 ? wrongLetter(answerKey[id]) : answerKey[id])).slice(0, 3));
     const hud = hudState(gam(), state, 9);
     expect(hud).toMatchObject({
@@ -127,8 +127,12 @@ describe('full-screen feedback, HUD and live rank', () => {
       streak: { current: 1, best: 1 },
       level: { name: 'Apprentice' },
       badges: { earned: 1, total: 8 },
-      history: ['correct', 'incorrect', 'correct'],
     });
+    // Dots would let the experimental group simply count their score before Q10.
+    expect(hud).not.toHaveProperty('history');
+    const withDots = gam();
+    withDots.hud.show_answer_dots = true;
+    expect(hudState(withDots, state, 9).history).toEqual(['correct', 'incorrect', 'correct']);
   });
 
   it('live rank compares with real players who already closed the same question', () => {

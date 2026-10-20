@@ -18,12 +18,13 @@ const SCREENS = {
   INSTRUCTIONS: renderInstructions,
   QUESTION: renderQuestion,
   FEEDBACK: renderFeedback,
+  POST_SURVEY_A: renderSurvey,
   FINAL: renderFinal,
   POST_SURVEY: renderSurvey,
   DEBRIEF: renderDebrief,
   WITHDRAWN: renderWithdrawn,
 };
-const STEPS_WITH_WITHDRAW = new Set(['PRE_SURVEY', 'INSTRUCTIONS', 'QUESTION', 'FEEDBACK', 'FINAL', 'POST_SURVEY']);
+const STEPS_WITH_WITHDRAW = new Set(['PRE_SURVEY', 'INSTRUCTIONS', 'QUESTION', 'FEEDBACK', 'POST_SURVEY_A', 'FINAL', 'POST_SURVEY']);
 
 const root = document.getElementById('app');
 const banner = document.getElementById('banner');

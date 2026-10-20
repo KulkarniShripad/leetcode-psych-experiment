@@ -14,6 +14,10 @@ export function loadConfig(env = process.env) {
     isProduction,
     port: Number(env.PORT || 3000),
     host: env.HOST || '0.0.0.0',
+    // Hosted: a Postgres connection string (Neon, Supabase, ...). Empty: a local SQLite file at DB_PATH.
+    databaseUrl: env.DATABASE_URL || '',
+    pgSchema: env.PG_SCHEMA || undefined,
+    pgPoolMax: Number(env.PG_POOL_MAX || 10),
     dbPath: fromRoot(env.DB_PATH || 'data/app.sqlite'),
     contentDir: fromRoot(env.CONTENT_DIR || 'server/content'),
     backupDir: fromRoot(env.BACKUP_DIR || 'data/backups'),
@@ -22,5 +26,7 @@ export function loadConfig(env = process.env) {
     allocationSeed: env.ALLOCATION_SEED || '',
     initialStudyMode: env.STUDY_MODE === 'pilot' ? 'pilot' : 'live',
     secureCookies: env.SECURE_COOKIES ? env.SECURE_COOKIES === '1' : isProduction,
+    // Render sets RENDER=true; its free instances have no permanent disk.
+    onEphemeralHost: env.RENDER === 'true' || env.EPHEMERAL_DISK === '1',
   };
 }

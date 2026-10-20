@@ -1,4 +1,5 @@
--- Confidence Quest schema. Applied on every start by server/db/migrate.js (idempotent).
+-- Confidence Quest schema (SQLite: local use and tests). Applied by server/db/migrate.js.
+-- schema.postgres.sql is the same schema for the hosted (Postgres) database.
 -- All timestamps are ISO 8601 UTC strings. No names, emails, IPs or device identifiers.
 
 CREATE TABLE IF NOT EXISTS meta (
@@ -43,7 +44,7 @@ CREATE TABLE IF NOT EXISTS allocation_slots (
 CREATE TABLE IF NOT EXISTS survey_responses (
   id             INTEGER PRIMARY KEY,
   participant_id TEXT NOT NULL REFERENCES participants(id),
-  phase          TEXT NOT NULL CHECK (phase IN ('pre', 'post')),
+  phase          TEXT NOT NULL CHECK (phase IN ('pre', 'post_a', 'post')),   -- post_a: right after Q9, before the score
   item_id        TEXT NOT NULL,
   value          INTEGER NOT NULL,
   submitted_at   TEXT NOT NULL,

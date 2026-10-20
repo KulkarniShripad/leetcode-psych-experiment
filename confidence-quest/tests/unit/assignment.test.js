@@ -1,11 +1,11 @@
 import crypto from 'node:crypto';
-import path from 'node:path';
 import { Worker } from 'node:worker_threads';
 import { describe, expect, it } from 'vitest';
-import { openDb } from '../../server/db/connection.js';
+import { openDatabase } from '../../server/db/connection.js';
 import { migrate } from '../../server/db/migrate.js';
 import { ensureAllocation, generateBlock, generateSlots } from '../../server/services/assignment.js';
-import { tmpDir } from '../helpers.js';
+import { freshStore, onPostgres } from '../helpers.js';
+import { claimMany } from './claimMany.js';
 
 const armDifference = (slots) => Math.abs(slots.filter((s) => s.arm === 'control').length - slots.filter((s) => s.arm === 'experimental').length);
 
@@ -43,41 +43,49 @@ describe('allocation list', () => {
     expect(control).toBeLessThan(2150);
   });
 
-  it('two connections claiming at the same instant never take the same slot', async () => {
-    const dbPath = path.join(tmpDir(), 'concurrency.sqlite');
-    const db = openDb(dbPath);
-    migrate(db);
-    ensureAllocation(db, { block_size: 2, main_slots: 40, pilot_slots: 4, separate_pilot_list: true }, 'concurrency-seed');
-    db.close();
+  it('separate connections claiming at the same instant never take the same slot', async () => {
+    const store = await freshStore();
+    const setup = await openDatabase(store);
+    await migrate(setup);
+    await ensureAllocation(setup, { block_size: 2, main_slots: 40, pilot_slots: 4, separate_pilot_list: true }, 'concurrency-seed');
+    await setup.close();
 
     const workers = 8;
     const perWorker = 15;
-    const start = new SharedArrayBuffer(4);
-    const runs = Array.from({ length: workers }, (_, w) =>
-      new Promise((resolve, reject) => {
-        const worker = new Worker(new URL('./claimWorker.js', import.meta.url), {
-          workerData: { dbPath, count: perWorker, prefix: `w${w}-${crypto.randomUUID()}`, start },
-        });
-        worker.on('message', resolve);
-        worker.on('error', reject);
-      }),
-    );
-    // Release all workers at once.
-    setTimeout(() => {
-      Atomics.store(new Int32Array(start), 0, 1);
-      Atomics.notify(new Int32Array(start), 0);
-    }, 200);
-    const claimed = (await Promise.all(runs)).flat();
+    let claimed;
+    if (onPostgres) {
+      // Postgres: eight connection pools in this process, all claiming at once.
+      const dbs = await Promise.all(Array.from({ length: workers }, () => openDatabase(store)));
+      claimed = (await Promise.all(dbs.map((db, w) => claimMany(db, perWorker, `w${w}-${crypto.randomUUID()}`)))).flat();
+      await Promise.all(dbs.map((db) => db.close()));
+    } else {
+      // SQLite: one connection per worker thread, released at the same instant.
+      const start = new SharedArrayBuffer(4);
+      const runs = Array.from({ length: workers }, (_, w) =>
+        new Promise((resolve, reject) => {
+          const worker = new Worker(new URL('./claimWorker.js', import.meta.url), {
+            workerData: { store, count: perWorker, prefix: `w${w}-${crypto.randomUUID()}`, start },
+          });
+          worker.on('message', resolve);
+          worker.on('error', reject);
+        }),
+      );
+      setTimeout(() => {
+        Atomics.store(new Int32Array(start), 0, 1);
+        Atomics.notify(new Int32Array(start), 0);
+      }, 200);
+      claimed = (await Promise.all(runs)).flat();
+    }
 
     expect(claimed).toHaveLength(workers * perWorker);
     expect(new Set(claimed).size).toBe(claimed.length);
 
-    const check = openDb(dbPath);
-    const rows = check.prepare('SELECT claimed_by FROM allocation_slots WHERE claimed_by IS NOT NULL').all();
+    const check = await openDatabase(store);
+    const rows = await check.all('SELECT claimed_by FROM allocation_slots WHERE claimed_by IS NOT NULL');
     expect(rows).toHaveLength(workers * perWorker);
     // 120 claims on a 40-slot list means it was extended, in whole blocks, without gaps.
-    const seqs = check.prepare("SELECT seq_no FROM allocation_slots WHERE list = 'main' AND claimed_by IS NOT NULL ORDER BY seq_no").all();
+    const seqs = await check.all("SELECT seq_no FROM allocation_slots WHERE list = 'main' AND claimed_by IS NOT NULL ORDER BY seq_no");
     expect(seqs.map((r) => r.seq_no)).toEqual(Array.from({ length: workers * perWorker }, (_, i) => i + 1));
-    check.close();
+    await check.close();
   });
 });

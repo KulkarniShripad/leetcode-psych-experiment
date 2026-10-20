@@ -1,10 +1,13 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import crypto from 'node:crypto';
+import pg from 'pg';
 import request from 'supertest';
 import { ROOT, loadConfig } from '../server/config.js';
 import { bootstrap } from '../server/bootstrap.js';
 import { createApp } from '../server/app.js';
+import { itemsForPhase } from '../server/services/surveyScoring.js';
 
 export const ADMIN_TOKEN = 'test-admin-token-0123456789';
 export const CONTENT_DIR = path.join(ROOT, 'server', 'content');
@@ -27,18 +30,57 @@ export function contentCopy(edits = {}) {
   return dir;
 }
 
-export function makeApp({ contentDir, env = {}, dbPath } = {}) {
+// Tests run on SQLite by default. With TEST_DATABASE_URL set (a Postgres database) every test
+// app gets its own empty schema there, so the same tests prove the cloud database path.
+export const PG_URL = process.env.TEST_DATABASE_URL || '';
+export const onPostgres = Boolean(PG_URL);
+const openApps = new Set();
+
+async function freshPgSchema() {
+  const schema = `t_${crypto.randomBytes(6).toString('hex')}`;
+  const client = new pg.Client({ connectionString: PG_URL });
+  await client.connect();
+  await client.query(`CREATE SCHEMA ${schema}`);
+  await client.end();
+  return schema;
+}
+
+// A new empty database for a test that talks to the database layer directly.
+export async function freshStore() {
+  return onPostgres
+    ? { databaseUrl: PG_URL, pgSchema: await freshPgSchema(), pgPoolMax: 4 }
+    : { dbPath: path.join(tmpDir(), 'direct.sqlite') };
+}
+
+// `store` reuses an existing database between two apps (a server restart): { dbPath } or { pgSchema }.
+export async function makeApp({ contentDir, env = {}, store } = {}) {
+  const storeEnv = onPostgres
+    ? { DATABASE_URL: PG_URL, PG_SCHEMA: store?.pgSchema ?? (await freshPgSchema()), PG_POOL_MAX: '4' }
+    : { DB_PATH: store?.dbPath ?? path.join(tmpDir(), 'test.sqlite') };
   const config = loadConfig({
-    DB_PATH: dbPath ?? path.join(tmpDir(), 'test.sqlite'),
+    ...storeEnv,
     ADMIN_TOKEN,
     ALLOCATION_SEED: 'test-seed',
     BACKUP_DIR: path.join(tmpDir(), 'backups'),
     ...(contentDir ? { CONTENT_DIR: contentDir } : {}),
     ...env,
   });
-  const { db, content } = bootstrap(config);
+  const { db, content } = await bootstrap(config);
   const { app, study } = createApp({ db, content, config });
-  return { app, db, content, config, study };
+  // Test-only link so fullRun can read each run's arm straight from the database.
+  app.cqTestDb = db;
+  const ctx = { app, db, content, config, study, store: { dbPath: config.dbPath, pgSchema: config.pgSchema } };
+  openApps.add(ctx);
+  return ctx;
+}
+
+export async function closeApp(ctx) {
+  if (!openApps.delete(ctx)) return;
+  await ctx.db.close();
+}
+
+export async function closeAllApps() {
+  await Promise.all([...openApps].map(closeApp));
 }
 
 // Supertest agent (keeps the cookie, like one browser) that records every response.
@@ -57,11 +99,17 @@ export function participant(app) {
   };
 }
 
+// Answers for every item in a survey: scale items get `value` (clamped to the scale, default the
+// middle), choice items get the option with that value if there is one, else the first option.
 export function surveyAnswers(content, phase, value) {
   const answers = {};
-  for (const item of content.survey.items.filter((i) => i.enabled && i.phases.includes(phase))) {
-    const scale = item.scale ?? content.survey.default_scale;
-    answers[item.id] = Math.min(scale.max, Math.max(scale.min, value ?? Math.ceil((scale.min + scale.max) / 2)));
+  for (const item of itemsForPhase(content.survey, phase)) {
+    if (item.type === 'choice') {
+      answers[item.id] = (item.options.find((o) => o.value === value) ?? item.options[0]).value;
+    } else {
+      const { min, max } = item.scale;
+      answers[item.id] = Math.min(max, Math.max(min, value ?? Math.ceil((min + max) / 2)));
+    }
   }
   return answers;
 }
@@ -98,7 +146,12 @@ export async function answerAll(p, content, choose = (id) => ANSWER_KEY[id]) {
   return results;
 }
 
-export async function finish(p, content, postValue) {
+// After Q9: Part A (Q10 guess, before any score), the score reveal, then Part B.
+export async function finish(p, content, postValue, guess = 5) {
+  if (content.survey.phases.post_a) {
+    const partA = await p.post('/api/survey/post_a', { answers: surveyAnswers(content, 'post_a', guess), idempotencyKey: key() });
+    if (partA.status !== 200) throw new Error(`part A failed: ${partA.status} ${partA.text}`);
+  }
   const results = await p.get('/api/results');
   if (results.status !== 200) throw new Error(`results failed: ${results.status} ${results.text}`);
   await p.post('/api/results/ack');
@@ -109,15 +162,24 @@ export async function finish(p, content, postValue) {
   return { results: results.body, debrief: done.body };
 }
 
-export async function fullRun(app, content, { choose, preValue, postValue } = {}) {
+export async function fullRun(app, content, { choose, preValue, postValue, guess } = {}) {
   const p = participant(app);
   await toQuestions(p, content, preValue);
   const answers = await answerAll(p, content, choose);
-  const { results, debrief } = await finish(p, content, postValue);
-  return { p, answers, results, debrief, code: debrief.participant_code };
+  const { results, debrief } = await finish(p, content, postValue, guess);
+  const code = debrief.participant_code;
+  // The arm comes from the database, never from what the API said.
+  const arm = app.cqTestDb ? await armOf(app.cqTestDb, code) : undefined;
+  return { p, answers, results, debrief, code, arm };
 }
 
-export const armOf = (db, code) => db.prepare('SELECT arm FROM participants WHERE participant_code = ?').get(code)?.arm;
+export const armOf = async (db, code) => (await db.get('SELECT arm FROM participants WHERE participant_code = ?', [code]))?.arm;
+
+export async function armMap(db) {
+  return new Map((await db.all('SELECT participant_code, arm FROM participants')).map((r) => [r.participant_code, r.arm]));
+}
+
+export const count = async (db, sql, params = []) => (await db.get(sql, params)).n;
 
 // Every key that appears anywhere in a JSON value.
 export function allKeys(value, out = new Set()) {

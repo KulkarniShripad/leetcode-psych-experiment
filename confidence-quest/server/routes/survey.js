@@ -5,20 +5,20 @@ import { parsePhase, schemas, validateBody } from '../middleware/validate.js';
 export function surveyRoutes({ study }) {
   const router = Router();
 
-  router.get('/api/survey/:phase', requireParticipant, requireActive, (req, res) => {
-    res.json(study.getSurvey(req.participant, parsePhase(req.params.phase)));
+  router.get('/api/survey/:phase', requireParticipant, requireActive, async (req, res) => {
+    res.json(await study.getSurvey(req.participant, parsePhase(req.params.phase)));
   });
 
-  // Submits every answer at once. Submitting the pre-survey also assigns the arm.
+  // Submits every answer at once. pre also assigns the arm; post_a (Q10) leads to the score.
   router.post(
     '/api/survey/:phase',
     requireParticipant,
     requireActive,
-    validateBody(schemas.surveySubmit, 'Please answer every statement before continuing.'),
-    (req, res) => {
+    validateBody(schemas.surveySubmit, 'Please answer every question before continuing.'),
+    async (req, res) => {
       const phase = parsePhase(req.params.phase);
-      const result = study.submitSurvey(req.participant, phase, req.valid.answers);
-      res.json({ ok: true, already_submitted: result.already_submitted, state: study.publicState(req.participant) });
+      const result = await study.submitSurvey(req.participant, phase, req.valid.answers);
+      res.json({ ok: true, already_submitted: result.already_submitted, state: await study.publicState(req.participant) });
     },
   );
 

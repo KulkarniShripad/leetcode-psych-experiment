@@ -5,7 +5,8 @@ Session size, timing, rooms, devices and eligibility are decision D14 — fill t
 
 ## The week before
 
-- [ ] All `[TEAM]` placeholders replaced; `survey.json`, `study.json`, `gamification.json` set to `"status": "approved"`.
+- [ ] The app is online: follow [`hosting.md`](hosting.md) (Render + Neon, free). The status page says **Data is stored in: Cloud Postgres database**.
+- [ ] All `[TEAM]` placeholders replaced; `study.json`, `gamification.json` set to `"status": "approved"` (`survey.json` already is).
 - [ ] `npm run check:content` shows **no warnings**.
 - [ ] `ALLOCATION_SEED` chosen and written down; set on the host **before the first start**.
 - [ ] Pilot with 5-8 classmates in **PILOT** mode (status page → Switch to PILOT mode).
@@ -16,12 +17,15 @@ Session size, timing, rooms, devices and eligibility are decision D14 — fill t
 
 ## Before doors open (Tech)
 
-1. Open `https://<host>/healthz` → `{"ok":true}`.
+1. **Wake the free server 10 minutes early:** open the participant link once (the first load can take a minute).
+   Then open `https://<host>/healthz` → `{"ok":true,"storage":"postgres",...}`.
+   Render → Settings: **Auto-Deploy Off** for the day.
 2. Open `https://<host>/admin`, enter the admin token.
    - Mode shows **LIVE**.
    - Live participants: **0** (or the count from earlier sessions).
    - **No yellow warnings.**
-3. Press **Back up database now** (or `npm run backup -- before-session-N`). Copy the file off the host.
+3. Press **Download full backup** and keep the file somewhere safe. Leave the status page open all session:
+   its 5-second refresh keeps the free server awake.
 4. Test every participant device: open the link, see the consent page, **do not** press Start.
 5. Print this runbook and the instruction script.
 
@@ -50,7 +54,7 @@ Session size, timing, rooms, devices and eligibility are decision D14 — fill t
 ## After each session
 
 1. `npm run export` (or download the CSVs from the status page).
-2. **Back up database now**; copy the backup and the exports off the host.
+2. **Download full backup**; keep it with the exports.
 3. Record the counts per arm and any incidents.
 
 ## Debrief and interviews

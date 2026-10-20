@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { ANSWER_KEY, allKeys, armOf, contentCopy, fullRun, makeApp, wrongLetter } from '../helpers.js';
+import { ANSWER_KEY, allKeys, contentCopy, fullRun, makeApp, wrongLetter } from '../helpers.js';
 
 // Block size 2 means participants 1 and 2 always land in different arms.
 async function oneOfEach(app, content, options) {
@@ -12,15 +12,15 @@ const GAME_KEYS = ['game', 'hud', 'tokens', 'streak', 'level', 'badges', 'live_r
 const KEY_LIKE = ['answer_key', 'answerKey', 'correct_option', 'correctOption', 'correct_answer', 'answer'];
 
 let ctx;
-beforeEach(() => {
-  ctx = makeApp();
+beforeEach(async () => {
+  ctx = await makeApp();
 });
 
 describe('full runs, both arms', () => {
   it('a Control run never receives any game field (leak hunt)', async () => {
     const { runs } = await oneOfEach(ctx.app, ctx.content);
-    const control = runs.find((r) => armOf(ctx.db, r.code) === 'control');
-    const experimental = runs.find((r) => armOf(ctx.db, r.code) === 'experimental');
+    const control = runs.find((r) => r.arm === 'control');
+    const experimental = runs.find((r) => r.arm === 'experimental');
     expect(control).toBeDefined();
     expect(experimental).toBeDefined();
 
@@ -40,7 +40,7 @@ describe('full runs, both arms', () => {
       }
       // Wrong answers say "Incorrect" and nothing about which option was right.
       for (const a of run.answers) expect(Object.keys(a).sort()).toEqual(
-        armOf(ctx.db, run.code) === 'experimental'
+        run.arm === 'experimental'
           ? ['correct', 'expired', 'game', 'n', 'next', 'next_button', 'text']
           : ['correct', 'expired', 'n', 'next', 'next_button', 'text'],
       );
@@ -52,20 +52,19 @@ describe('full runs, both arms', () => {
     for (const r of right.runs) expect(r.results.score.correct).toBe(9);
     const wrong = await oneOfEach(ctx.app, ctx.content, { choose: (id) => wrongLetter(ANSWER_KEY[id]) });
     for (const r of wrong.runs) expect(r.results.score.correct).toBe(0);
-    const scores = ctx.db
-      .prepare('SELECT p.participant_code, SUM(q.is_correct) AS s FROM question_responses q JOIN participants p ON p.id = q.participant_id GROUP BY p.id')
-      .all();
+    const scores = (await ctx.db.all('SELECT p.participant_code, SUM(q.is_correct) AS s FROM question_responses q JOIN participants p ON p.id = q.participant_id GROUP BY p.id'));
     expect(scores.map((s) => s.s).sort()).toEqual([0, 0, 9, 9]);
   });
 
   it('the experimental arm gets tokens, streaks, levels, badges, a HUD and a leaderboard of real participants', async () => {
     const { runs } = await oneOfEach(ctx.app, ctx.content);
-    const exp = runs.find((r) => armOf(ctx.db, r.code) === 'experimental');
+    const exp = runs.find((r) => r.arm === 'experimental');
     expect(exp.answers.map((a) => a.game.tokens.earned)).toEqual([1, 3, 4, 2, 3, 4, 2, 3, 4]);
     expect(exp.answers.map((a) => a.game.streak.current)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
     expect(exp.answers[2].game.overlay.title).toBe('On fire!');
     expect(exp.answers[8].game.badges.new.map((b) => b.key)).toEqual(['array_ace', 'finisher', 'perfect_run']);
-    expect(exp.answers[8].game.hud.history).toEqual(Array(9).fill('correct'));
+    // No green/red answer dots: they would let this group count its score before Q10.
+    expect(exp.answers[8].game.hud).not.toHaveProperty('history');
     expect(exp.results.game.tokens.total).toBe(26);
     expect(exp.results.game.level).toMatchObject({ number: 5, name: 'Legend' });
     expect(exp.results.game.badges.all.every((b) => b.earned)).toBe(true);
@@ -79,7 +78,7 @@ describe('full runs, both arms', () => {
     expect(huds).toHaveLength(9);
     expect(huds.map((hud) => hud.tokens.total)).toEqual([0, 1, 4, 8, 10, 13, 17, 19, 22]);
 
-    const events = ctx.db.prepare('SELECT type, key, value FROM gamification_events ORDER BY id').all();
+    const events = (await ctx.db.all('SELECT type, key, value FROM gamification_events ORDER BY id'));
     expect(events.filter((e) => e.type === 'tokens').reduce((s, e) => s + e.value, 0)).toBe(26);
     expect(events.filter((e) => e.type === 'streak_bonus').reduce((s, e) => s + e.value, 0)).toBe(8);
     expect(events.filter((e) => e.type === 'badge')).toHaveLength(8);
@@ -96,15 +95,15 @@ describe('full runs, both arms', () => {
       // Participant i gets i questions wrong.
       runs.push(await fullRun(ctx.app, ctx.content, { choose: (id, n) => (n <= i ? wrongLetter(ANSWER_KEY[id]) : ANSWER_KEY[id]) }));
     }
-    const exp = runs.filter((r) => armOf(ctx.db, r.code) === 'experimental');
+    const exp = runs.filter((r) => r.arm === 'experimental');
     expect(exp).toHaveLength(3);
     const last = exp.at(-1).results.game.leaderboard;
     expect(last.rows).toHaveLength(3);
     expect(last.rows.map((r) => r.value)).toEqual([...last.rows.map((r) => r.value)].sort((a, b) => b - a));
-    const names = ctx.db.prepare("SELECT leaderboard_name FROM participants WHERE arm = 'experimental'").all().map((r) => r.leaderboard_name);
+    const names = (await ctx.db.all("SELECT leaderboard_name FROM participants WHERE arm = 'experimental'")).map((r) => r.leaderboard_name);
     expect(new Set(last.rows.map((r) => r.name))).toEqual(new Set(names));
     // Control participants never get a leaderboard name.
-    expect(ctx.db.prepare("SELECT COUNT(*) AS n FROM participants WHERE arm = 'control' AND leaderboard_name IS NOT NULL").get().n).toBe(0);
+    expect((await ctx.db.get("SELECT COUNT(*) AS n FROM participants WHERE arm = 'control' AND leaderboard_name IS NOT NULL")).n).toBe(0);
   });
 
   it('experimental output follows gamification.json (changed points, rank switched off)', async () => {
@@ -118,9 +117,9 @@ describe('full runs, both arms', () => {
         g.hud.enabled = false;
       },
     });
-    const custom = makeApp({ contentDir: dir });
+    const custom = await makeApp({ contentDir: dir });
     const { runs } = await oneOfEach(custom.app, custom.content);
-    const exp = runs.find((r) => armOf(custom.db, r.code) === 'experimental');
+    const exp = runs.find((r) => r.arm === 'experimental');
     expect(exp.answers[0].game.tokens.earned).toBe(10);
     expect(exp.results.game.tokens.total).toBe(90);
     expect(exp.results.game).not.toHaveProperty('leaderboard');
@@ -135,7 +134,7 @@ describe('full runs, both arms', () => {
       // Participants 1-2 answer everything right, 3-4 everything wrong.
       runs.push(await fullRun(ctx.app, ctx.content, { choose: (id) => (i < 2 ? ANSWER_KEY[id] : wrongLetter(ANSWER_KEY[id])) }));
     }
-    const exp = runs.filter((r) => armOf(ctx.db, r.code) === 'experimental');
+    const exp = runs.filter((r) => r.arm === 'experimental');
     expect(exp).toHaveLength(2);
     // The first experimental player had nobody to compare with.
     expect(exp[0].answers.every((a) => !a.game.live_rank)).toBe(true);
@@ -148,15 +147,15 @@ describe('full runs, both arms', () => {
     await fullRun(ctx.app, ctx.content);
     const replay = await exp[1].p.post('/api/answer', { questionId: 'Q1', selectedOption: 'A', idempotencyKey: 'replay-key-123' });
     expect(replay.body.game.live_rank).toEqual(exp[1].answers[0].game.live_rank);
-    const recorded = ctx.db.prepare("SELECT COUNT(*) AS n FROM gamification_events WHERE type IN ('live_rank', 'live_rank_pool')").get().n;
+    const recorded = (await ctx.db.get("SELECT COUNT(*) AS n FROM gamification_events WHERE type IN ('live_rank', 'live_rank_pool')")).n;
     expect(recorded).toBeGreaterThanOrEqual(18);
   });
 
   it('instructions differ only by the one extra line for the experimental arm', async () => {
     const { runs } = await oneOfEach(ctx.app, ctx.content);
     const instructionsOf = (run) => run.p.log.find((e) => e.body?.state?.step === 'INSTRUCTIONS').body.state.instructions.paragraphs;
-    const control = instructionsOf(runs.find((r) => armOf(ctx.db, r.code) === 'control'));
-    const exp = instructionsOf(runs.find((r) => armOf(ctx.db, r.code) === 'experimental'));
+    const control = instructionsOf(runs.find((r) => r.arm === 'control'));
+    const exp = instructionsOf(runs.find((r) => r.arm === 'experimental'));
     expect(exp.slice(0, -1)).toEqual(control);
     expect(exp.at(-1)).toBe(ctx.content.gamification.instructions_extra);
   });

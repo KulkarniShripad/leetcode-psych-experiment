@@ -31,7 +31,7 @@ export const schemas = {
 };
 
 export function parsePhase(value) {
-  if (value !== 'pre' && value !== 'post') throw new AppError('VALIDATION', 'Unknown survey.');
+  if (!['pre', 'post_a', 'post'].includes(value)) throw new AppError('VALIDATION', 'Unknown survey.');
   return value;
 }
 

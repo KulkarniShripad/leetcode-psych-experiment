@@ -11,13 +11,13 @@ import { CONTENT_FILES } from '../server/services/content.js';
 const pilot = process.argv.includes('--pilot');
 const target = process.argv.slice(2).find((a) => !a.startsWith('--'));
 const config = loadConfig();
-const { db, content } = bootstrap(config);
+const { db, content } = await bootstrap(config);
 const stamp = new Date().toISOString().replace(/[:.]/g, '-');
 const outDir = path.resolve(target ?? path.join(config.exportDir, pilot ? `PILOT-${stamp}` : stamp));
 fs.mkdirSync(path.join(outDir, 'content'), { recursive: true });
 
 for (const [name, file] of Object.entries(EXPORTS)) {
-  fs.writeFileSync(path.join(outDir, file), buildExport(db, content, name, { pilot }));
+  fs.writeFileSync(path.join(outDir, file), await buildExport(db, content, name, { pilot }));
 }
 fs.copyFileSync(path.join(ROOT, 'docs', 'data_dictionary.md'), path.join(outDir, 'data_dictionary.md'));
 const hashes = [];
@@ -26,5 +26,5 @@ for (const file of CONTENT_FILES) {
   hashes.push(`${content.hashes[file]}  ${file}`);
 }
 fs.writeFileSync(path.join(outDir, 'content', 'SHA256SUMS'), `${hashes.join('\n')}\n`);
-db.close();
+await db.close();
 console.log(`Exports written to ${outDir}`);

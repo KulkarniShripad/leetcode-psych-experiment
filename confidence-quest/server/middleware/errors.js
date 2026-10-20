@@ -23,7 +23,7 @@ export function notFound(req, res, next) {
 // Nothing the participant typed is ever copied into the log.
 export function errorHandler(logEvent) {
   // eslint-disable-next-line no-unused-vars
-  return (err, req, res, next) => {
+  return async (err, req, res, next) => {
     let error = err;
     if (err?.type === 'entity.parse.failed' || err?.type === 'entity.too.large') {
       error = new AppError('VALIDATION', 'The request could not be read.');
@@ -33,7 +33,7 @@ export function errorHandler(logEvent) {
     }
     if (error.code !== 'NOT_FOUND') {
       try {
-        logEvent(req.participant?.id ?? null, 'error', {
+        await logEvent(req.participant?.id ?? null, 'error', {
           code: error.code,
           method: req.method,
           route: req.route?.path ?? 'unmatched',

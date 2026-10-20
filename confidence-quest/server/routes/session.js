@@ -14,26 +14,26 @@ export function sessionRoutes({ study, config }) {
   router.post(
     '/api/session',
     validateBody(schemas.session, 'Please tick the box to agree before continuing.'),
-    (req, res) => {
+    async (req, res) => {
       // Same device starting again: keep the existing session (resume or debrief).
-      if (req.participant) return res.status(200).json(study.publicState(req.participant));
-      const { token, participant } = study.createParticipant();
+      if (req.participant) return res.status(200).json(await study.publicState(req.participant));
+      const { token, participant } = await study.createParticipant();
       setSessionCookie(res, token, config);
-      res.status(201).json(study.publicState(participant));
+      res.status(201).json(await study.publicState(participant));
     },
   );
 
   // No session yet is the normal first visit (S0), not an error.
-  router.get('/api/state', (req, res) => {
-    res.json(req.participant ? study.publicState(req.participant) : { step: 'CONSENT' });
+  router.get('/api/state', async (req, res) => {
+    res.json(req.participant ? await study.publicState(req.participant) : { step: 'CONSENT' });
   });
 
-  router.post('/api/withdraw', requireParticipant, validateBody(schemas.withdraw), (req, res) => {
-    res.json(study.withdraw(req.participant));
+  router.post('/api/withdraw', requireParticipant, validateBody(schemas.withdraw), async (req, res) => {
+    res.json(await study.withdraw(req.participant));
   });
 
-  router.post('/api/complete', requireParticipant, requireActive, (req, res) => {
-    res.json(study.complete(req.participant));
+  router.post('/api/complete', requireParticipant, requireActive, async (req, res) => {
+    res.json(await study.complete(req.participant));
   });
 
   return router;

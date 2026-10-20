@@ -53,69 +53,84 @@ export function listFor(isPilot, allocationConfig) {
   return isPilot && allocationConfig.separate_pilot_list ? 'pilot' : 'main';
 }
 
-function insertSlots(db, slots) {
-  const insert = db.prepare('INSERT INTO allocation_slots (list, seq_no, block_no, arm) VALUES (@list, @seq_no, @block_no, @arm)');
-  for (const slot of slots) insert.run(slot);
+async function insertSlots(db, slots) {
+  for (const slot of slots) {
+    await db.run('INSERT INTO allocation_slots (list, seq_no, block_no, arm) VALUES (?, ?, ?, ?)', [
+      slot.list,
+      slot.seq_no,
+      slot.block_no,
+      slot.arm,
+    ]);
+  }
 }
 
 // Creates the allocation lists on first start. The seed and block size are stored in meta
 // and win over later config changes, because slots may already have been claimed.
-export function ensureAllocation(db, allocationConfig, envSeed) {
+export async function ensureAllocation(db, allocationConfig, envSeed) {
   const warnings = [];
-  db.transaction(() => {
-    let seed = getMeta(db, 'allocation_seed');
+  await db.transaction(async () => {
+    await db.lockGlobal();
+    let seed = await getMeta(db, 'allocation_seed');
     if (!seed) {
       seed = envSeed || crypto.randomBytes(16).toString('hex');
-      setMeta(db, 'allocation_seed', seed);
-      setMeta(db, 'allocation_seed_source', envSeed ? 'ALLOCATION_SEED' : 'random');
+      await setMeta(db, 'allocation_seed', seed);
+      await setMeta(db, 'allocation_seed_source', envSeed ? 'ALLOCATION_SEED' : 'random');
     } else if (envSeed && envSeed !== seed) {
       warnings.push('ALLOCATION_SEED differs from the seed stored in the database; the stored seed is kept.');
     }
-    let blockSize = Number(getMeta(db, 'allocation_block_size'));
+    let blockSize = Number(await getMeta(db, 'allocation_block_size'));
     if (!blockSize) {
       blockSize = allocationConfig.block_size;
-      setMeta(db, 'allocation_block_size', blockSize);
+      await setMeta(db, 'allocation_block_size', blockSize);
     } else if (blockSize !== allocationConfig.block_size) {
       warnings.push(`study.json block_size is ${allocationConfig.block_size} but the stored list uses ${blockSize}; the stored list is kept.`);
     }
     const lists = allocationConfig.separate_pilot_list ? ['main', 'pilot'] : ['main'];
     for (const list of lists) {
-      const existing = db.prepare('SELECT COUNT(*) AS n FROM allocation_slots WHERE list = ?').get(list).n;
+      const existing = (await db.get('SELECT COUNT(*) AS n FROM allocation_slots WHERE list = ?', [list])).n;
       if (existing === 0) {
         const count = list === 'main' ? allocationConfig.main_slots : allocationConfig.pilot_slots;
-        insertSlots(db, generateSlots(seed, list, blockSize, count));
+        await insertSlots(db, generateSlots(seed, list, blockSize, count));
       }
     }
-  }).immediate();
+  });
   return warnings;
 }
 
 // Adds one more block when a list runs out. Abandoned slots are never reused.
-function extendList(db, list) {
-  const seed = getMeta(db, 'allocation_seed');
-  const blockSize = Number(getMeta(db, 'allocation_block_size'));
-  const last = db.prepare('SELECT MAX(block_no) AS block, MAX(seq_no) AS seq FROM allocation_slots WHERE list = ?').get(list);
-  insertSlots(db, generateSlots(seed, list, blockSize, blockSize, (last.block ?? 0) + 1, (last.seq ?? 0) + 1));
-  db.prepare('INSERT INTO events (participant_id, event_type, payload, created_at) VALUES (NULL, ?, ?, ?)').run(
+async function extendList(db, list) {
+  await db.lockGlobal();
+  // Someone else may have extended it while we waited for the lock. (A free slot that another
+  // claim is holding right now does not count: it is about to be taken.)
+  const free = await db.get(`SELECT id FROM allocation_slots WHERE list = ? AND claimed_by IS NULL LIMIT 1${db.skipLocked}`, [list]);
+  if (free) return;
+  const seed = await getMeta(db, 'allocation_seed');
+  const blockSize = Number(await getMeta(db, 'allocation_block_size'));
+  const last = await db.get('SELECT MAX(block_no) AS block, MAX(seq_no) AS seq FROM allocation_slots WHERE list = ?', [list]);
+  await insertSlots(db, generateSlots(seed, list, blockSize, blockSize, (last.block ?? 0) + 1, (last.seq ?? 0) + 1));
+  await db.run('INSERT INTO events (participant_id, event_type, payload, created_at) VALUES (NULL, ?, ?, ?)', [
     'allocation_extended',
     JSON.stringify({ list, block_no: (last.block ?? 0) + 1 }),
     nowIso(),
-  );
+  ]);
 }
 
-// Must run inside an IMMEDIATE transaction so two requests can never take the same slot.
-export function claimSlot(db, participantId, list) {
-  const next = db.prepare(
-    'SELECT id, arm, seq_no FROM allocation_slots WHERE list = ? AND claimed_by IS NULL ORDER BY seq_no LIMIT 1',
-  );
-  let slot = next.get(list);
+// Takes the next free slot in one atomic statement. Must run inside db.transaction().
+// On Postgres, SKIP LOCKED means two people claiming at the same instant get different slots.
+export async function claimSlot(db, participantId, list) {
+  const claim = () =>
+    db.get(
+      `UPDATE allocation_slots SET claimed_by = ?, claimed_at = ?
+       WHERE id = (SELECT id FROM allocation_slots WHERE list = ? AND claimed_by IS NULL ORDER BY seq_no LIMIT 1${db.skipLocked})
+         AND claimed_by IS NULL
+       RETURNING id, arm, seq_no`,
+      [participantId, nowIso(), list],
+    );
+  let slot = await claim();
   if (!slot) {
-    extendList(db, list);
-    slot = next.get(list);
+    await extendList(db, list);
+    slot = await claim();
   }
-  const claimed = db
-    .prepare('UPDATE allocation_slots SET claimed_by = ?, claimed_at = ? WHERE id = ? AND claimed_by IS NULL')
-    .run(participantId, nowIso(), slot.id);
-  if (claimed.changes !== 1) throw new Error(`allocation slot ${slot.id} was already claimed`);
+  if (!slot) throw new Error(`no free allocation slot in list ${list}`);
   return slot;
 }

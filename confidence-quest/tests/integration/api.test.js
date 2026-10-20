@@ -2,11 +2,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import request from 'supertest';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { ADMIN_TOKEN, answerAll, consent, finish, key, makeApp, participant, surveyAnswers, toQuestions } from '../helpers.js';
+import { ADMIN_TOKEN, answerAll, consent, finish, key, makeApp, onPostgres, participant, surveyAnswers, toQuestions } from '../helpers.js';
 
 let ctx;
-beforeEach(() => {
-  ctx = makeApp();
+beforeEach(async () => {
+  ctx = await makeApp();
 });
 
 const errorCode = (res) => res.body?.error?.code;
@@ -46,7 +46,7 @@ describe('POST /api/session', () => {
     expect(cookie).toMatch(/^cq_session=/);
     expect(cookie).toMatch(/HttpOnly/);
     expect(cookie).toMatch(/SameSite=Strict/);
-    const row = ctx.db.prepare('SELECT * FROM participants').get();
+    const row = (await ctx.db.get('SELECT * FROM participants'));
     expect(row.participant_code).toMatch(/^[ACDEFHJKMNPQRTUVWXY3479]{6}$/);
     expect(row.token_hash).toMatch(/^[0-9a-f]{64}$/);
     expect(cookie).not.toContain(row.token_hash);
@@ -58,7 +58,7 @@ describe('POST /api/session', () => {
       expect(res.status).toBe(400);
       expect(errorCode(res)).toBe('VALIDATION');
     }
-    expect(ctx.db.prepare('SELECT COUNT(*) AS n FROM participants').get().n).toBe(0);
+    expect((await ctx.db.get('SELECT COUNT(*) AS n FROM participants')).n).toBe(0);
   });
 
   it('VALIDATION for malformed JSON', async () => {
@@ -73,7 +73,7 @@ describe('POST /api/session', () => {
     const again = await p.post('/api/session', { consent: true });
     expect(again.status).toBe(200);
     expect(again.body.step).toBe('PRE_SURVEY');
-    expect(ctx.db.prepare('SELECT COUNT(*) AS n FROM participants').get().n).toBe(1);
+    expect((await ctx.db.get('SELECT COUNT(*) AS n FROM participants')).n).toBe(1);
   });
 });
 
@@ -82,7 +82,7 @@ describe('without a session', () => {
     const res = await request(ctx.app).get('/api/state');
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ step: 'CONSENT' });
-    expect(ctx.db.prepare("SELECT COUNT(*) AS n FROM events WHERE event_type = 'error'").get().n).toBe(0);
+    expect((await ctx.db.get("SELECT COUNT(*) AS n FROM events WHERE event_type = 'error'")).n).toBe(0);
   });
 });
 
@@ -112,8 +112,11 @@ describe('surveys', () => {
     await consent(p);
     const pre = await p.get('/api/survey/pre');
     expect(pre.status).toBe(200);
-    expect(pre.body.items.map((i) => i.id)).toEqual(['conf_1', 'conf_2', 'conf_3', 'conf_4', 'conf_5']);
-    expect(pre.body.items[0]).not.toHaveProperty('reverse');
+    expect(pre.body.sections.map((s) => s.items.map((i) => i.id))).toEqual([['C1', 'C2', 'C3', 'C4', 'C5', 'C6'], ['P1', 'P2']]);
+    expect(pre.body.sections[0].stem).toBe('How confident are you that you can do each of the following right now?');
+    expect(pre.body.sections[1].items[0].options.map((o) => o.label)).toEqual(['0', '1-25', '26-100', '101-300', 'More than 300']);
+    expect(pre.body.sections[0].items[0]).not.toHaveProperty('reverse');
+    expect(errorCode(await p.get('/api/survey/post_a'))).toBe('NOT_YOUR_TURN');
     expect(errorCode(await p.get('/api/survey/post'))).toBe('NOT_YOUR_TURN');
     expect(errorCode(await p.get('/api/survey/middle'))).toBe('VALIDATION');
   });
@@ -123,16 +126,18 @@ describe('surveys', () => {
     await consent(p);
     const answers = surveyAnswers(ctx.content, 'pre');
     const missing = { ...answers };
-    delete missing.conf_3;
+    delete missing.C3;
     const r1 = await p.post('/api/survey/pre', { answers: missing });
     expect(r1.status).toBe(400);
-    expect(r1.body.error.message).toBe('Please answer every statement before continuing.');
-    const r2 = await p.post('/api/survey/pre', { answers: { ...answers, conf_2: 9 } });
+    expect(r1.body.error.message).toBe('Please answer every question before continuing.');
+    const r2 = await p.post('/api/survey/pre', { answers: { ...answers, C2: 9 } });
     expect(r2.status).toBe(400);
     expect(r2.body.error.message).toMatch(/1 to 7/);
+    const r3 = await p.post('/api/survey/pre', { answers: { ...answers, P1: 6 } });
+    expect(r3.body.error.message).toBe('Please choose one of the options.');
     expect(errorCode(await p.post('/api/survey/pre', { answers: 'nope' }))).toBe('VALIDATION');
-    expect(ctx.db.prepare('SELECT COUNT(*) AS n FROM survey_responses').get().n).toBe(0);
-    expect(ctx.db.prepare('SELECT arm FROM participants').get().arm).toBeNull();
+    expect((await ctx.db.get('SELECT COUNT(*) AS n FROM survey_responses')).n).toBe(0);
+    expect((await ctx.db.get('SELECT arm FROM participants')).arm).toBeNull();
   });
 
   it('pre submit assigns the arm; a repeat submit is ignored', async () => {
@@ -145,9 +150,9 @@ describe('surveys', () => {
     const repeat = await p.post('/api/survey/pre', body);
     expect(repeat.status).toBe(200);
     expect(repeat.body.already_submitted).toBe(true);
-    expect(ctx.db.prepare('SELECT COUNT(*) AS n FROM survey_responses').get().n).toBe(5);
-    expect(ctx.db.prepare('SELECT COUNT(*) AS n FROM allocation_slots WHERE claimed_by IS NOT NULL').get().n).toBe(1);
-    expect(['control', 'experimental']).toContain(ctx.db.prepare('SELECT arm FROM participants').get().arm);
+    expect((await ctx.db.get('SELECT COUNT(*) AS n FROM survey_responses')).n).toBe(8);
+    expect((await ctx.db.get('SELECT COUNT(*) AS n FROM allocation_slots WHERE claimed_by IS NOT NULL')).n).toBe(1);
+    expect(['control', 'experimental']).toContain((await ctx.db.get('SELECT arm FROM participants')).arm);
   });
 
   it('the post survey is NOT_YOUR_TURN before all nine questions', async () => {
@@ -187,7 +192,7 @@ describe('questions', () => {
     await toQuestions(p, ctx.content);
     const q = await p.get('/api/question/1');
     expect(q.status).toBe(200);
-    const arm = ctx.db.prepare('SELECT arm FROM participants').get().arm;
+    const arm = (await ctx.db.get('SELECT arm FROM participants')).arm;
     const expected = ['code', 'id', 'language', 'n', 'options', 'options_format', 'progress_text', 'prompt', 'section', 'submit_button', 'total'];
     // The experimental group also gets the game bar, and nothing else.
     if (arm === 'experimental') {
@@ -214,10 +219,10 @@ describe('questions', () => {
     expect(first.body).toMatchObject({ correct: true, next: { step: 'QUESTION', n: 2 } });
     const again = await p.post('/api/answer', { questionId: 'Q1', selectedOption: 'A', idempotencyKey: 'abc12345' });
     expect(again.body).toEqual(first.body);
-    const row = ctx.db.prepare("SELECT * FROM question_responses WHERE question_id = 'Q1'").get();
+    const row = (await ctx.db.get("SELECT * FROM question_responses WHERE question_id = 'Q1'"));
     expect(row).toMatchObject({ selected_option: 'D', is_correct: 1 });
     expect(row.time_taken_ms).toBeGreaterThanOrEqual(0);
-    expect(ctx.db.prepare('SELECT COUNT(*) AS n FROM question_responses').get().n).toBe(1);
+    expect((await ctx.db.get('SELECT COUNT(*) AS n FROM question_responses')).n).toBe(1);
   });
 
   it('POST /api/next moves on, and repeats are harmless', async () => {
@@ -234,16 +239,40 @@ describe('questions', () => {
 });
 
 describe('results, post-survey, completion', () => {
-  it('GET /api/results is NOT_YOUR_TURN until the ninth answer', async () => {
+  it('the score is only shown after Part A (Q10), which comes right after Q9', async () => {
     const p = participant(ctx.app);
     await toQuestions(p, ctx.content);
     expect(errorCode(await p.get('/api/results'))).toBe('NOT_YOUR_TURN');
     expect(errorCode(await p.post('/api/results/ack'))).toBe('NOT_YOUR_TURN');
     expect(errorCode(await p.post('/api/complete'))).toBe('NOT_YOUR_TURN');
+    expect(errorCode(await p.post('/api/survey/post_a', { answers: { Q10: 5 } }))).toBe('NOT_YOUR_TURN');
     await answerAll(p, ctx.content);
+    expect((await p.get('/api/state')).body.step).toBe('POST_SURVEY_A');
+    // No score anywhere before the guess.
+    expect(errorCode(await p.get('/api/results'))).toBe('NOT_YOUR_TURN');
+    const partA = await p.get('/api/survey/post_a');
+    expect(partA.body.sections).toEqual([
+      {
+        title: null,
+        stem: null,
+        items: [
+          {
+            id: 'Q10',
+            text: 'Out of the nine questions you just answered, how many do you think you got right?',
+            type: 'scale',
+            scale: { min: 0, max: 9, labels: {} },
+          },
+        ],
+      },
+    ]);
+    expect(JSON.stringify(partA.body)).not.toMatch(/score|correct/i);
+    expect((await p.post('/api/survey/post_a', { answers: { Q10: 10 } })).status).toBe(400);
+    const sent = await p.post('/api/survey/post_a', { answers: { Q10: 7 } });
+    expect(sent.body.state.step).toBe('FINAL');
     const results = await p.get('/api/results');
     expect(results.status).toBe(200);
-    expect(results.body.score).toMatchObject({ correct: 9, total: 9, text: 'You answered 9 of 9 questions correctly.' });
+    expect(results.body.title).toBe('Your result');
+    expect(results.body.score).toMatchObject({ correct: 9, total: 9, text: 'You answered 9 of 9 correctly.' });
   });
 
   it('completing returns the debrief and code, and is repeatable', async () => {
@@ -251,11 +280,11 @@ describe('results, post-survey, completion', () => {
     await toQuestions(p, ctx.content);
     await answerAll(p, ctx.content);
     const { debrief } = await finish(p, ctx.content);
-    const code = ctx.db.prepare('SELECT participant_code FROM participants').get().participant_code;
+    const code = (await ctx.db.get('SELECT participant_code FROM participants')).participant_code;
     expect(debrief.participant_code).toBe(code);
     const again = await p.post('/api/complete');
     expect(again.body).toEqual(debrief);
-    const row = ctx.db.prepare('SELECT status, current_step, completed_at FROM participants').get();
+    const row = (await ctx.db.get('SELECT status, current_step, completed_at FROM participants'));
     expect(row).toMatchObject({ status: 'completed', current_step: 'DEBRIEF' });
     expect(row.completed_at).toBeTruthy();
     // Coming back after completing shows the debrief, not the test.
@@ -277,13 +306,13 @@ describe('stopping (withdraw)', () => {
     const blocked = await p.get('/api/question/1');
     expect(blocked.status).toBe(403);
     expect(errorCode(blocked)).toBe('FORBIDDEN');
-    expect(ctx.db.prepare('SELECT status FROM participants').get().status).toBe('abandoned');
+    expect((await ctx.db.get('SELECT status FROM participants')).status).toBe('abandoned');
 
     // The next participant gets the next slot, not the abandoned one.
-    const slotOfFirst = ctx.db.prepare('SELECT allocation_slot_id AS id FROM participants').get().id;
+    const slotOfFirst = (await ctx.db.get('SELECT allocation_slot_id AS id FROM participants')).id;
     const q = participant(ctx.app);
     await toQuestions(q, ctx.content);
-    const slots = ctx.db.prepare('SELECT allocation_slot_id AS id FROM participants ORDER BY started_at').all().map((r) => r.id);
+    const slots = (await ctx.db.all('SELECT allocation_slot_id AS id FROM participants ORDER BY started_at')).map((r) => r.id);
     expect(slots).toEqual([slotOfFirst, slotOfFirst + 1]);
   });
 });
@@ -297,7 +326,7 @@ describe('SERVER errors', () => {
     expect(res.status).toBe(500);
     expect(errorCode(res)).toBe('SERVER');
     expect(res.text).not.toMatch(/broken_table|question_responses|sqlite/i);
-    const logged = ctx.db.prepare("SELECT participant_id, payload FROM events WHERE event_type = 'error'").get();
+    const logged = (await ctx.db.get("SELECT participant_id, payload FROM events WHERE event_type = 'error'"));
     expect(logged.participant_id).toBeTruthy();
     expect(JSON.parse(logged.payload)).toEqual({ code: 'SERVER', method: 'GET', route: '/api/question/:n' });
   });
@@ -306,7 +335,7 @@ describe('SERVER errors', () => {
     const p = participant(ctx.app);
     await consent(p);
     await p.post('/api/survey/pre', { answers: { conf_1: 99, 'secret note from participant': 1 } });
-    const payloads = ctx.db.prepare("SELECT payload FROM events WHERE event_type = 'error'").all().map((r) => r.payload);
+    const payloads = (await ctx.db.all("SELECT payload FROM events WHERE event_type = 'error'")).map((r) => r.payload);
     expect(payloads).toHaveLength(1);
     expect(payloads[0]).not.toMatch(/secret/);
     expect(JSON.parse(payloads[0]).code).toBe('VALIDATION');
@@ -335,7 +364,7 @@ describe('admin', () => {
   });
 
   it('admin is fully disabled when ADMIN_TOKEN is not set', async () => {
-    const noToken = makeApp({ env: { ADMIN_TOKEN: '' } });
+    const noToken = await makeApp({ env: { ADMIN_TOKEN: '' } });
     const res = await request(noToken.app).get('/admin/api/status').set('X-Admin-Token', '');
     expect(res.status).toBe(403);
   });
@@ -362,8 +391,27 @@ describe('admin', () => {
     expect((await admin('get', '/admin/api/export/secrets.csv')).status).toBe(404);
   });
 
-  it('backup copies the database file', async () => {
+  it('downloads a full backup of every table, on either database', async () => {
+    const p = participant(ctx.app);
+    await toQuestions(p, ctx.content);
+    const res = await admin('get', '/admin/api/backup.json');
+    expect(res.status).toBe(200);
+    expect(res.headers['content-disposition']).toMatch(/attachment; filename="confidence-quest-backup-.*\.json"/);
+    expect(res.body.storage.kind).toBe(onPostgres ? 'postgres' : 'sqlite');
+    expect(Object.keys(res.body.tables)).toEqual([
+      'meta', 'allocation_slots', 'participants', 'survey_responses', 'question_responses', 'gamification_events', 'events',
+    ]);
+    expect(res.body.tables.participants).toHaveLength(1);
+    expect(res.body.tables.survey_responses).toHaveLength(8);
+  });
+
+  it('copies the database file when it is a local SQLite file', async () => {
     const res = await admin('post', '/admin/api/backup');
+    if (onPostgres) {
+      // The cloud database keeps its own history; the download above is the backup.
+      expect(res.status).toBe(400);
+      return;
+    }
     expect(res.status).toBe(200);
     expect(fs.existsSync(path.join(ctx.config.backupDir, res.body.file))).toBe(true);
   });
@@ -377,13 +425,13 @@ describe('admin', () => {
     const live = participant(ctx.app);
     await toQuestions(live, ctx.content);
 
-    const rows = ctx.db.prepare('SELECT is_pilot, s.list FROM participants p JOIN allocation_slots s ON s.id = p.allocation_slot_id ORDER BY started_at').all();
+    const rows = (await ctx.db.all('SELECT is_pilot, s.list FROM participants p JOIN allocation_slots s ON s.id = p.allocation_slot_id ORDER BY started_at'));
     expect(rows).toEqual([{ is_pilot: 1, list: 'pilot' }, { is_pilot: 0, list: 'main' }]);
 
     expect((await admin('post', '/admin/api/purge-pilot').send({ confirm: 'yes' })).status).toBe(400);
     const purge = await admin('post', '/admin/api/purge-pilot').send({ confirm: 'DELETE PILOT DATA' });
     expect(purge.body).toEqual({ ok: true, removed: 1 });
-    expect(ctx.db.prepare('SELECT COUNT(*) AS n FROM participants').get().n).toBe(1);
+    expect((await ctx.db.get('SELECT COUNT(*) AS n FROM participants')).n).toBe(1);
     expect((await pilot.get('/api/state')).body.step).toBe('CONSENT');
     expect((await live.get('/api/state')).body.step).toBe('QUESTION');
   });
@@ -391,12 +439,12 @@ describe('admin', () => {
   it('withdraws a participant’s data by code', async () => {
     const p = participant(ctx.app);
     await toQuestions(p, ctx.content);
-    const code = ctx.db.prepare('SELECT participant_code FROM participants').get().participant_code;
+    const code = (await ctx.db.get('SELECT participant_code FROM participants')).participant_code;
     expect((await admin('post', '/admin/api/withdraw').send({ participant_code: 'NOPE', confirm: true })).status).toBe(400);
     expect((await admin('post', '/admin/api/withdraw').send({ participant_code: 'AAAAAA', confirm: true })).status).toBe(404);
     await admin('post', '/admin/api/withdraw').send({ participant_code: code, confirm: true }).expect(200);
-    expect(ctx.db.prepare('SELECT status FROM participants').get().status).toBe('withdrawn');
-    expect(ctx.db.prepare('SELECT COUNT(*) AS n FROM survey_responses').get().n).toBe(0);
+    expect((await ctx.db.get('SELECT status FROM participants')).status).toBe('withdrawn');
+    expect((await ctx.db.get('SELECT COUNT(*) AS n FROM survey_responses')).n).toBe(0);
     expect((await p.get('/api/state')).body.step).toBe('WITHDRAWN');
   });
 });

@@ -28,10 +28,9 @@ export function setSessionCookie(res, token, config) {
 
 // Attaches req.participant when the cookie matches a stored token hash. Never fails on its own.
 export function loadParticipant(db) {
-  const byHash = db.prepare('SELECT * FROM participants WHERE token_hash = ?');
-  return (req, res, next) => {
+  return async (req, res, next) => {
     const token = parseCookies(req.headers.cookie)[SESSION_COOKIE];
-    if (token) req.participant = byHash.get(sha256(token)) ?? undefined;
+    if (token) req.participant = (await db.get('SELECT * FROM participants WHERE token_hash = ?', [sha256(token)])) ?? undefined;
     next();
   };
 }

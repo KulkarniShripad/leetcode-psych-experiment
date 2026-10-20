@@ -48,33 +48,53 @@ const scaleSchema = z
 const MEASURES = [
   'confidence',
   'postdiction',
+  'relative_performance',
   'manipulation_check',
   'pressure',
   'enjoyment',
   'prior_experience',
+  'practice_frequency',
   'competitiveness',
   'other',
 ];
 
+export const SURVEY_PHASES = ['pre', 'post_a', 'post'];
+
+const surveyItemSchema = z
+  .object({
+    id: z.string().regex(/^[A-Za-z0-9_]{1,64}$/, 'use letters, digits and _ only'),
+    measure: z.enum(MEASURES),
+    type: z.enum(['scale', 'choice']).default('scale'),
+    text: text,
+    // A scale is a name from `scales` or written out in place.
+    scale: z.union([z.string(), scaleSchema]).optional(),
+    options: z.array(z.object({ value: z.number().int(), label: text }).strict()).min(2).optional(),
+    reverse: z.boolean().default(false),
+  })
+  .strict()
+  .superRefine((item, ctx) => {
+    if (item.type === 'scale' && !item.scale) ctx.addIssue({ code: 'custom', path: ['scale'], message: 'a scale item needs a scale' });
+    if (item.type === 'choice' && !item.options) ctx.addIssue({ code: 'custom', path: ['options'], message: 'a choice item needs options' });
+    if (item.type === 'choice' && item.reverse) ctx.addIssue({ code: 'custom', path: ['reverse'], message: 'only scale items can be reverse-coded' });
+  });
+
+const surveyPhaseSchema = z
+  .object({
+    title: text,
+    intro: z.string().default(''),
+    sections: z
+      .array(z.object({ title: z.string().optional(), stem: z.string().optional(), items: z.array(z.string()).min(1) }).strict())
+      .min(1),
+  })
+  .strict();
+
 const surveySchema = z.object({
   status: z.string().optional(),
   note: z.string().optional(),
-  default_scale: scaleSchema,
-  items: z
-    .array(
-      z
-        .object({
-          id: z.string().regex(/^[A-Za-z0-9_]{1,64}$/, 'use letters, digits and _ only'),
-          measure: z.enum(MEASURES),
-          phases: z.array(z.enum(['pre', 'post'])).min(1),
-          reverse: z.boolean().default(false),
-          enabled: z.boolean().default(true),
-          text: text,
-          scale: scaleSchema.optional(),
-        })
-        .strict(),
-    )
-    .min(1),
+  scales: z.record(z.string(), scaleSchema).default({}),
+  items: z.array(surveyItemSchema).min(1),
+  // pre: before the questions. post_a: right after Q9, before any score. post: after the score.
+  phases: z.object({ pre: surveyPhaseSchema, post_a: surveyPhaseSchema.optional(), post: surveyPhaseSchema }).strict(),
 });
 
 export const BADGE_ICONS = ['star', 'flame', 'bolt', 'trophy', 'target', 'medal', 'rocket', 'crown'];
@@ -197,12 +217,7 @@ const studySchema = z.object({
     declined_title: text,
     declined_paragraphs: paragraphs,
   }),
-  surveys: z.object({
-    pre: z.object({ title: text, intro: z.string() }),
-    post: z.object({ title: text, intro: z.string() }),
-    submit_button: text,
-    missing_message: text,
-  }),
+  surveys: z.object({ submit_button: text, missing_message: text }),
   instructions: z.object({ title: text, paragraphs, start_button: text }),
   questions: z.object({
     order: z.enum(['fixed', 'random_per_participant']),
@@ -308,6 +323,10 @@ export function loadContent(dir) {
   if (problems.length) throw new ContentError(problems);
 
   content.questionsById = Object.fromEntries(content.questions.map((q) => [q.id, q]));
+  // From here on every scale item carries its scale object (named scales resolved).
+  content.survey.items = content.survey.items.map((item) =>
+    item.type === 'choice' ? item : { ...item, scale_name: typeof item.scale === 'string' ? item.scale : null, scale: resolveScale(content.survey, item) },
+  );
   content.warnings = collectWarnings(content);
   return content;
 }
@@ -325,33 +344,7 @@ function crossCheck({ questions, answerKey, survey, gamification }) {
     if (!ids.includes(id)) problems.push(`answer_key.json: ${id}: no question with this id in questions.json`);
   }
 
-  const itemIds = survey.items.map((it) => it.id);
-  survey.items.forEach((item, i) => {
-    if (itemIds.indexOf(item.id) !== i) problems.push(`survey.json: items[${i}].id: duplicate id ${item.id}`);
-    // Pre and post must use the same confidence items: one definition, asked in both phases.
-    if (item.measure === 'confidence' && item.enabled && !(item.phases.includes('pre') && item.phases.includes('post'))) {
-      problems.push(
-        `survey.json: items[${i}].phases: confidence items must be asked in both "pre" and "post" so the wording is identical`,
-      );
-    }
-    const scale = item.scale ?? survey.default_scale;
-    for (const label of Object.keys(scale.labels)) {
-      const v = Number(label);
-      if (!Number.isInteger(v) || v < scale.min || v > scale.max) {
-        problems.push(`survey.json: items[${i}].scale.labels.${label}: label is outside the scale ${scale.min}-${scale.max}`);
-      }
-    }
-  });
-  if (!survey.items.some((it) => it.enabled && it.measure === 'confidence')) {
-    problems.push('survey.json: items: at least one enabled item must have measure "confidence"');
-  }
-  const postdiction = survey.items.find((it) => it.measure === 'postdiction' && it.enabled);
-  if (postdiction) {
-    const scale = postdiction.scale ?? survey.default_scale;
-    if (scale.min !== 0 || scale.max !== questions.length) {
-      problems.push(`survey.json: ${postdiction.id}.scale: the postdiction scale must run from 0 to ${questions.length}`);
-    }
-  }
+  problems.push(...checkSurvey(survey, questions.length));
 
   const sections = new Set(questions.map((q) => q.section));
   const badgeKeys = new Set();
@@ -370,9 +363,86 @@ function crossCheck({ questions, answerKey, survey, gamification }) {
   return problems;
 }
 
+// Survey rules that protect the design: every referenced item exists, the confidence items
+// are asked before and after with the same stem, wording and order, and Q10 runs 0..N.
+function checkSurvey(survey, questionCount) {
+  const problems = [];
+  const byId = new Map();
+  survey.items.forEach((item, i) => {
+    if (byId.has(item.id)) problems.push(`survey.json: items[${i}].id: duplicate id ${item.id}`);
+    byId.set(item.id, item);
+    if (typeof item.scale === 'string' && !(item.scale in survey.scales)) {
+      problems.push(`survey.json: items[${i}].scale: no scale called "${item.scale}" in scales`);
+      return;
+    }
+    const scale = resolveScale(survey, item);
+    if (scale) {
+      for (const label of Object.keys(scale.labels)) {
+        const v = Number(label);
+        if (!Number.isInteger(v) || v < scale.min || v > scale.max) {
+          problems.push(`survey.json: items[${i}] (${item.id}): label ${label} is outside the scale ${scale.min}-${scale.max}`);
+        }
+      }
+    }
+    if (item.options) {
+      const values = item.options.map((o) => o.value);
+      if (new Set(values).size !== values.length) problems.push(`survey.json: items[${i}].options: values must be different`);
+    }
+  });
+
+  const layout = {};
+  for (const phase of SURVEY_PHASES) {
+    const spec = survey.phases[phase];
+    if (!spec) continue;
+    const seen = new Set();
+    layout[phase] = [];
+    spec.sections.forEach((section, si) => {
+      section.items.forEach((id) => {
+        if (!byId.has(id)) problems.push(`survey.json: phases.${phase}.sections[${si}]: no item with id ${id}`);
+        if (seen.has(id)) problems.push(`survey.json: phases.${phase}: ${id} is listed twice`);
+        seen.add(id);
+        layout[phase].push({ id, stem: section.stem ?? null });
+      });
+    });
+  }
+
+  const confidence = (phase) => (layout[phase] ?? []).filter((e) => byId.get(e.id)?.measure === 'confidence');
+  const pre = confidence('pre');
+  const post = confidence('post');
+  if (!pre.length) problems.push('survey.json: phases.pre: at least one confidence item is needed');
+  const sameOrder = pre.length === post.length && pre.every((e, i) => e.id === post[i].id && e.stem === post[i].stem);
+  if (!sameOrder) {
+    problems.push(
+      'survey.json: phases.post: the confidence items must be asked after the questions with the same stem and in the same order as before (pre and post must match for the change score)',
+    );
+  }
+  for (const item of survey.items.filter((it) => it.measure === 'confidence')) {
+    if (!pre.some((e) => e.id === item.id)) problems.push(`survey.json: confidence item ${item.id} is not asked in phases.pre`);
+  }
+  if ((layout.post_a ?? []).some((e) => byId.get(e.id)?.measure === 'confidence')) {
+    problems.push('survey.json: phases.post_a: confidence items belong in pre and post, not post_a');
+  }
+
+  for (const item of survey.items.filter((it) => it.measure === 'postdiction')) {
+    const scale = resolveScale(survey, item);
+    if (scale && (scale.min !== 0 || scale.max !== questionCount)) {
+      problems.push(`survey.json: ${item.id}.scale: the postdiction scale must run from 0 to ${questionCount}`);
+    }
+  }
+  return problems;
+}
+
+export function resolveScale(survey, item) {
+  if (item.type === 'choice' || !item.scale) return null;
+  return typeof item.scale === 'string' ? survey.scales[item.scale] ?? null : item.scale;
+}
+
 function collectWarnings({ survey, gamification, study, questions }) {
   const warnings = [];
-  if (survey.status !== 'approved') warnings.push('survey.json is not approved yet: confidence items are placeholders (D9).');
+  if (survey.status !== 'approved') warnings.push('survey.json is not marked approved yet (D9).');
+  const used = new Set(SURVEY_PHASES.flatMap((phase) => survey.phases[phase]?.sections.flatMap((s) => s.items) ?? []));
+  const unused = survey.items.filter((item) => !used.has(item.id)).map((item) => item.id);
+  if (unused.length) warnings.push(`survey.json: items not asked in any survey: ${unused.join(', ')}.`);
   if (gamification.status !== 'approved') warnings.push('gamification.json rules are provisional, not approved (D4-D7, D17).');
   if (study.status !== 'approved') warnings.push('study.json texts (consent, instructions, debrief) are placeholders (D1, D2, D8).');
   if (/PLACEHOLDER/i.test(study.consent.version)) warnings.push('Consent version is still marked PLACEHOLDER (D1).');

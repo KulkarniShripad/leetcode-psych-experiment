@@ -36,10 +36,14 @@ async function continueAfterFeedback(page, label) {
   }
 }
 
+// Picks the 5th choice on scales (or the last option of a shorter list).
 async function fillSurvey(page) {
   const sets = page.locator('fieldset.likert');
   const count = await sets.count();
-  for (let i = 0; i < count; i++) await sets.nth(i).locator('input[type=radio]').nth(4).check();
+  for (let i = 0; i < count; i++) {
+    const radios = sets.nth(i).locator('input[type=radio]');
+    await radios.nth(Math.min(4, (await radios.count()) - 1)).check();
+  }
 }
 
 // Plays one participant through the whole study; returns what the browser showed.
@@ -53,13 +57,15 @@ async function playThrough(page, label, { wrongOn = [] } = {}) {
   await page.getByLabel(/I agree to take part/).check();
   await start.click();
 
-  await expect(page.getByRole('heading', { name: 'Before the questions' })).toBeVisible();
-  await page.getByRole('button', { name: 'Submit' }).click();
-  await expect(page.getByText('Please answer every statement before continuing.')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Before you start' })).toBeVisible();
+  await expect(page.getByText('How confident are you that you can do each of the following right now?')).toBeVisible();
+  expect(await page.locator('fieldset.likert').count()).toBe(8);
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page.getByText('Please answer every question before continuing.')).toBeVisible();
   await fillSurvey(page);
   await expectCleanScreen(page);
   if (label === 'first') await shoot(page, '02-pre-survey');
-  await page.getByRole('button', { name: 'Submit' }).click();
+  await page.getByRole('button', { name: 'Continue' }).click();
 
   await expect(page.getByRole('heading', { name: 'Instructions' })).toBeVisible();
   await expectCleanScreen(page);
@@ -107,22 +113,36 @@ async function playThrough(page, label, { wrongOn = [] } = {}) {
     await continueAfterFeedback(page, i < 8 ? 'Next question' : 'Continue');
   }
 
-  await expect(page.getByRole('heading', { name: 'You have finished the questions' })).toBeVisible();
+  // Part A: the guess, before any score is shown.
+  await expect(page.getByRole('heading', { name: 'One quick question' })).toBeVisible();
+  await expect(page.getByText('Out of the nine questions you just answered, how many do you think you got right?')).toBeVisible();
+  expect(await page.locator('body').innerText()).not.toMatch(/You answered \d of 9/);
+  expect(await page.locator('fieldset.likert input[type=radio]').count()).toBe(10);
+  if (label === 'first') await shoot(page, '05-part-a');
+  await page.locator('input[name=item-Q10][value="7"]').check();
+  await page.getByRole('button', { name: 'Continue' }).click();
+
+  await expect(page.getByRole('heading', { name: 'Your result' })).toBeVisible();
   await expectCleanScreen(page);
   const score = await page.getByTestId('score').textContent();
   const leaderboard = await page.getByTestId('leaderboard').count();
   if (process.env.SCREENSHOTS) await page.waitForTimeout(2500); // let the reveal animations finish
   await shoot(page, `05-final-${sawGamePanel ? 'experimental' : 'control'}`);
-  await page.getByRole('button', { name: 'Continue to the last survey' }).click();
+  await page.getByRole('button', { name: 'Continue', exact: true }).click();
 
-  await expect(page.getByRole('heading', { name: 'After the questions' })).toBeVisible();
+  // Part B: C1-C6 again, then Q11, Q13, Q14 and Q12 last.
+  await expect(page.getByRole('heading', { name: 'A few last questions' })).toBeVisible();
+  expect(await page.locator('fieldset.likert').count()).toBe(10);
+  const lastItem = await page.locator('fieldset.likert').last().locator('legend').innerText();
+  expect(lastItem).toMatch(/did you see any badges, tokens or a leaderboard\?/);
   await fillSurvey(page);
-  await page.getByRole('button', { name: 'Submit' }).click();
+  if (label === 'first') await shoot(page, '06-part-b');
+  await page.getByRole('button', { name: 'Continue' }).click();
 
   await expect(page.getByRole('heading', { name: 'Thank you for taking part' })).toBeVisible();
   await expectCleanScreen(page);
   const code = (await page.getByTestId('participant-code').textContent()).trim();
-  if (label === 'first') await shoot(page, '06-debrief');
+  if (label === 'first') await shoot(page, '07-debrief');
   // Reload after finishing shows the same debrief, not the start.
   await page.reload();
   await expect(page.getByTestId('participant-code')).toHaveText(code);
@@ -147,8 +167,9 @@ test('a Control and an Experimental participant complete the study; the CSVs mat
   const ctrl = a.sawGamePanel ? b : a;
   expect(exp.leaderboard).toBe(1);
   expect(ctrl.leaderboard).toBe(0);
-  expect(a.score).toBe('You answered 7 of 9 questions correctly.');
-  expect(b.score).toBe('You answered 8 of 9 questions correctly.');
+  // Identical wording for both groups.
+  expect(a.score).toBe('You answered 7 of 9 correctly.');
+  expect(b.score).toBe('You answered 8 of 9 correctly.');
 
   const csv = await request.get('/admin/api/export/participants.csv', { headers: { 'X-Admin-Token': E2E_ADMIN_TOKEN } });
   expect(csv.status()).toBe(200);
@@ -177,7 +198,7 @@ test('declining consent stores nothing; stopping part-way shows the stopped page
   await quitter.goto('/');
   await quitter.getByLabel(/I agree to take part/).check();
   await quitter.getByRole('button', { name: 'Start', exact: true }).click();
-  await expect(quitter.getByRole('heading', { name: 'Before the questions' })).toBeVisible();
+  await expect(quitter.getByRole('heading', { name: 'Before you start' })).toBeVisible();
   quitter.once('dialog', (d) => d.accept());
   await quitter.getByRole('button', { name: 'Stop taking part' }).click();
   await expect(quitter.getByRole('heading', { name: 'You have stopped taking part' })).toBeVisible();
@@ -193,9 +214,9 @@ test('a network drop is retried with the same key; a longer outage shows "connec
   await page.goto('/');
   await page.getByLabel(/I agree to take part/).check();
   await page.getByRole('button', { name: 'Start', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Before the questions' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Before you start' })).toBeVisible();
   await fillSurvey(page);
-  await page.getByRole('button', { name: 'Submit' }).click();
+  await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByRole('button', { name: 'Start question 1' }).click();
   await expect(page.getByRole('heading', { name: 'Question 1 of 9' })).toBeVisible();
 
@@ -246,5 +267,5 @@ test('the admin page shows live counts after logging in', async ({ page }) => {
   await page.getByRole('button', { name: 'Open' }).click();
   await expect(page.getByRole('heading', { name: 'Live participants by arm' })).toBeVisible();
   await expect(page.getByText('LIVE', { exact: true })).toBeVisible();
-  await shoot(page, '07-admin-status');
+  await shoot(page, '08-admin-status');
 });

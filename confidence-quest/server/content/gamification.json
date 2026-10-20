@@ -1,6 +1,6 @@
 {
   "status": "provisional",
-  "note": "DECISIONS D4-D7 and D17. Everything here applies to the EXPERIMENTAL group only; the Control group never sees any of it. Tokens 1/2/3 by difficulty plus a streak bonus, levels, eight badges (three effort-based, five performance-based), an animated result card after each answer, a live game bar, live rank against real players and a top-5 leaderboard. Edit this file to change any rule; no code change is needed.",
+  "note": "DECISIONS D4-D7 and D17. Everything here applies to the EXPERIMENTAL group only; the Control group never sees any of it. Tokens 1/2/3 by difficulty plus a streak bonus, levels, eight badges (three effort-based, five performance-based), an animated result card after each answer, a live game bar (answer dots off so Q10 is not a simple count), live rank against real players and a top-5 leaderboard. Edit this file to change any rule; no code change is needed.",
   "instructions_extra": "In this version you play for points: earn tokens for every correct answer, build streaks for bonus tokens, level up, unlock badges and see how you rank against the other players as you go.",
   "tokens": {
     "enabled": true,
@@ -63,7 +63,7 @@
     "level_up_text": "Level up! Level {number}: {name}",
     "badge_unlocked_text": "Badge unlocked"
   },
-  "hud": { "enabled": true, "show_answer_dots": true },
+  "hud": { "enabled": true, "show_answer_dots": false },
   "live_rank": {
     "enabled": true,
     "min_pool": 1,

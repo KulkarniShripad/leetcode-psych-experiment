@@ -49,20 +49,93 @@ describe('content files', () => {
     expect(compareWithAppendix(loadContent(dir))).toEqual([expect.stringContaining('Q5.options.B')]);
   });
 
-  it('pre and post use the same confidence items and wording', () => {
+  it('C1-C6 are identical before and after: same stem, scale, wording and order', () => {
     const { survey } = loadContent(CONTENT_DIR);
-    const conf = (phase) => itemsForPhase(survey, phase).filter((i) => i.measure === 'confidence').map((i) => `${i.id}:${i.text}`);
+    const conf = (phase) =>
+      itemsForPhase(survey, phase)
+        .filter((i) => i.measure === 'confidence')
+        .map((i) => `${i.id}|${i.text}|${JSON.stringify(i.scale)}`);
     expect(conf('pre')).toEqual(conf('post'));
-    expect(conf('pre').length).toBeGreaterThan(0);
+    expect(conf('pre')).toHaveLength(6);
+    const stem = (phase) => survey.phases[phase].sections.find((s) => s.items.includes('C1')).stem;
+    expect(stem('pre')).toBe('How confident are you that you can do each of the following right now?');
+    expect(stem('post')).toBe(stem('pre'));
+    expect(itemsForPhase(survey, 'pre')[0].scale.labels).toEqual({ 1: 'Not at all confident', 4: 'Moderately confident', 7: 'Extremely confident' });
   });
 
-  it('fails if a confidence item is only asked in one phase', () => {
-    const dir = contentCopy({
+  it('follows the final questionnaire order exactly', () => {
+    const { survey } = loadContent(CONTENT_DIR);
+    const ids = (phase) => itemsForPhase(survey, phase).map((i) => i.id);
+    expect(ids('pre')).toEqual(['C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'P1', 'P2']);
+    expect(ids('post_a')).toEqual(['Q10']);
+    // Q12 is the only item that names badges, tokens or a leaderboard, so it comes last.
+    expect(ids('post')).toEqual(['C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'Q11', 'Q13', 'Q14', 'Q12']);
+    expect(survey.phases.pre.intro).toBe(
+      'Your answers are anonymous and used only for research. There are no right or wrong answers, so please answer honestly.',
+    );
+  });
+
+  it('never mentions game features in the surveys, except Q12 at the very end', () => {
+    const { survey } = loadContent(CONTENT_DIR);
+    const words = /\b(gamif\w*|badges?|tokens?|leaderboards?|points?|streaks?|levels?|rank(s|ed|ing)?)\b/i;
+    const texts = [];
+    for (const phase of ['pre', 'post_a', 'post']) {
+      const spec = survey.phases[phase];
+      texts.push(spec.title, spec.intro, ...spec.sections.flatMap((s) => [s.title ?? '', s.stem ?? '']));
+      for (const item of itemsForPhase(survey, phase)) {
+        if (item.id === 'Q12') continue;
+        texts.push(item.text, ...(item.options ?? []).map((o) => o.label), ...Object.values(item.scale?.labels ?? {}));
+      }
+    }
+    expect(texts.filter((t) => words.test(t))).toEqual([]);
+  });
+
+  it('collects no names, emails, IDs, gender or age', () => {
+    const { survey } = loadContent(CONTENT_DIR);
+    const personal = /\bname\b|e-?mail|student id|roll|gender|\bsex\b|\bage\b|birth|phone/i;
+    expect(survey.items.filter((i) => personal.test(i.text)).map((i) => i.id)).toEqual([]);
+  });
+
+  it('fails if the confidence items differ between pre and post', () => {
+    const reordered = contentCopy({
       'survey.json': (json) => {
-        json.items[1].phases = ['post'];
+        json.phases.post.sections[0].items = ['C2', 'C1', 'C3', 'C4', 'C5', 'C6'];
       },
     });
-    expect(problemsFor(dir)).toEqual([expect.stringMatching(/^survey\.json: items\[1\]\.phases: .*both "pre" and "post"/)]);
+    expect(problemsFor(reordered)).toEqual([expect.stringMatching(/^survey\.json: phases\.post: the confidence items must be asked .* same order/)]);
+    const restemmed = contentCopy({
+      'survey.json': (json) => {
+        json.phases.post.sections[0].stem = 'How confident are you now?';
+      },
+    });
+    expect(problemsFor(restemmed)).toEqual([expect.stringMatching(/same stem/)]);
+    const dropped = contentCopy({
+      'survey.json': (json) => {
+        json.phases.pre.sections[0].items = ['C1', 'C2', 'C3', 'C4', 'C5'];
+      },
+    });
+    expect(problemsFor(dropped).join('\n')).toMatch(/C6 is not asked in phases\.pre/);
+  });
+
+  it('fails if a survey references an unknown item or scale, or Q10 is not 0-9', () => {
+    const unknownItem = contentCopy({
+      'survey.json': (json) => {
+        json.phases.post.sections[1].items.push('Q99');
+      },
+    });
+    expect(problemsFor(unknownItem)).toEqual(['survey.json: phases.post.sections[1]: no item with id Q99']);
+    const unknownScale = contentCopy({
+      'survey.json': (json) => {
+        json.items.find((i) => i.id === 'Q13').scale = 'agree_5';
+      },
+    });
+    expect(problemsFor(unknownScale)).toEqual([expect.stringMatching(/scale: no scale called "agree_5"/)]);
+    const badGuess = contentCopy({
+      'survey.json': (json) => {
+        json.scales.count_0_9.max = 10;
+      },
+    });
+    expect(problemsFor(badGuess)).toEqual(['survey.json: Q10.scale: the postdiction scale must run from 0 to 9']);
   });
 
   it('names the file and field for each kind of problem', () => {
@@ -86,10 +159,10 @@ describe('content files', () => {
 
     const badScale = contentCopy({
       'survey.json': (json) => {
-        json.default_scale.max = 'seven';
+        json.scales.confidence_7.max = 'seven';
       },
     });
-    expect(problemsFor(badScale)).toEqual([expect.stringMatching(/^survey\.json: default_scale\.max: /)]);
+    expect(problemsFor(badScale)).toEqual([expect.stringMatching(/^survey\.json: scales\.confidence_7\.max: /)]);
 
     const badBadge = contentCopy({
       'gamification.json': (json) => {
@@ -115,7 +188,8 @@ describe('content files', () => {
 
   it('warns while texts and rules are still placeholders', () => {
     const { warnings } = loadContent(CONTENT_DIR);
-    expect(warnings.join('\n')).toMatch(/D9/);
     expect(warnings.join('\n')).toMatch(/D4-D7/);
+    // The final questionnaires are approved, so there is no survey warning any more.
+    expect(warnings.join('\n')).not.toMatch(/survey\.json/);
   });
 });

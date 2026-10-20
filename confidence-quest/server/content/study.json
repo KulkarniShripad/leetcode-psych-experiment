@@ -7,7 +7,7 @@
     "title": "Before you begin",
     "paragraphs": [
       "[TEAM: replace with the approved consent text, D1.]",
-      "You are invited to take part in a short research study about learning to code. You will answer a short survey, nine multiple-choice coding questions, and a second short survey. It takes about 20-30 minutes.",
+      "You are invited to take part in a short research study about learning to code. You will answer a few short questions about yourself, nine multiple-choice coding questions, and a few short questions at the end. It takes about 20-30 minutes.",
       "Taking part is voluntary. You can stop at any time using the 'Stop taking part' link at the bottom of the page, with no penalty.",
       "We do not collect your name, email, student ID or any other identifying information. At the end you will get a random participant code. Keep it if you want to ask for your answers to be removed later."
     ],
@@ -18,16 +18,8 @@
     "declined_paragraphs": ["Nothing has been recorded. You can close this page."]
   },
   "surveys": {
-    "pre": {
-      "title": "Before the questions",
-      "intro": "Please tell us how much you agree with each statement. There are no right or wrong answers."
-    },
-    "post": {
-      "title": "After the questions",
-      "intro": "Please tell us how much you agree with each statement now. There are no right or wrong answers."
-    },
-    "submit_button": "Submit",
-    "missing_message": "Please answer every statement before continuing."
+    "submit_button": "Continue",
+    "missing_message": "Please answer every question before continuing."
   },
   "instructions": {
     "title": "Instructions",
@@ -55,17 +47,17 @@
     "last_button": "Continue"
   },
   "final_screen": {
-    "title": "You have finished the questions",
-    "score_text": "You answered {correct} of {total} questions correctly.",
+    "title": "Your result",
+    "score_text": "You answered {correct} of {total} correctly.",
     "control": {
       "show_score": true,
-      "paragraphs": ["Next there is one more short survey."]
+      "paragraphs": ["Next there are a few last questions."]
     },
     "experimental": {
       "show_score": true,
-      "paragraphs": ["Next there is one more short survey."]
+      "paragraphs": ["Next there are a few last questions."]
     },
-    "continue_button": "Continue to the last survey"
+    "continue_button": "Continue"
   },
   "debrief": {
     "title": "Thank you for taking part",

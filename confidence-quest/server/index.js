@@ -3,15 +3,21 @@ import { createApp } from './app.js';
 import { bootstrap } from './bootstrap.js';
 import { ContentError } from './services/content.js';
 
-function main() {
+async function main() {
   const config = loadConfig();
   if (config.isProduction && config.adminToken.length < 16) {
     console.error('Refusing to start: set ADMIN_TOKEN (at least 16 characters) in production.');
     process.exit(1);
   }
+  // Free cloud hosts (Render) wipe the server's disk on every restart and deploy: a local
+  // SQLite file there would lose answers. The hosted study must use a cloud database.
+  if (config.onEphemeralHost && !config.databaseUrl) {
+    console.error('Refusing to start: this host has no permanent disk. Set DATABASE_URL to your cloud Postgres database (see docs/hosting.md).');
+    process.exit(1);
+  }
   let boot;
   try {
-    boot = bootstrap(config);
+    boot = await bootstrap(config);
   } catch (err) {
     if (err instanceof ContentError) {
       console.error(`Refusing to start. ${err.message}`);
@@ -24,13 +30,14 @@ function main() {
   if (!config.adminToken) console.warn('[warning] ADMIN_TOKEN is not set: the admin status page and exports are disabled.');
 
   const { app } = createApp({ db, content, config });
+  const where = db.dialect === 'postgres' ? `cloud Postgres at ${db.describe().host}` : `SQLite file ${config.dbPath}`;
   const server = app.listen(config.port, config.host, () => {
-    console.log(`Confidence Quest listening on http://localhost:${config.port} (database: ${config.dbPath})`);
+    console.log(`Confidence Quest listening on port ${config.port}. Data is stored in: ${where}`);
   });
 
   const shutdown = () => {
-    server.close(() => {
-      db.close();
+    server.close(async () => {
+      await db.close();
       process.exit(0);
     });
     setTimeout(() => process.exit(0), 5000).unref();
