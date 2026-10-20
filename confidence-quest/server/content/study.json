@@ -6,7 +6,6 @@
     "version": "consent-PLACEHOLDER-v0",
     "title": "Before you begin",
     "paragraphs": [
-      "[TEAM: replace with the approved consent text, D1.]",
       "You are invited to take part in a short research study about learning to code. You will answer a few short questions about yourself, nine multiple-choice coding questions, and a few short questions at the end. It takes about 20-30 minutes.",
       "Taking part is voluntary. You can stop at any time using the 'Stop taking part' link at the bottom of the page, with no penalty.",
       "We do not collect your name, email, student ID or any other identifying information. At the end you will get a random participant code. Keep it if you want to ask for your answers to be removed later."
@@ -62,7 +61,6 @@
   "debrief": {
     "title": "Thank you for taking part",
     "paragraphs": [
-      "[TEAM: replace with the approved debrief, D1.]",
       "This study looks at whether game features on coding platforms, such as tokens, badges and leaderboards, change how confident students feel about coding.",
       "Participants were randomly given one of two versions of the same test. Both versions had the same nine questions and told you whether each answer was correct. One version was also played as a game: tokens, streaks, levels, badges, animated feedback and a leaderboard. Comparing the two versions lets us see what the game features add.",
       "The leaderboard only ever showed real results from people who took part."
@@ -70,7 +68,7 @@
     "code_label": "Your participant code",
     "code_help": "Write this code down. It is the only way to link your answers to you. If you take part in an interview, you can choose to share it.",
     "withdraw_paragraphs": [
-      "If you want your answers removed from the study, give your participant code to the research team: [TEAM: contact details and deadline]."
+      "If you want your answers removed from the study, give your participant code to the research team."
     ]
   },
   "withdraw": {
